@@ -41,6 +41,15 @@ fun PreferencesPane(vm: BudgetViewModel, sync: SyncManager, modifier: Modifier =
                     Text("Import Data", style = MaterialTheme.typography.headlineMedium)
                 }
                 ImportBar(vm = vm)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Export Data", style = MaterialTheme.typography.headlineMedium)
+                }
+                ExportBar(vm = vm)
             }
         }
     }
