@@ -9,6 +9,7 @@ import com.vidalabs.budget.data.CategoryTotal
 import com.vidalabs.budget.data.SummaryTotals
 import com.vidalabs.budget.data.BudgetItemEntity
 import com.vidalabs.budget.data.BudgetRow
+import com.vidalabs.budget.data.TransactionRow
 import java.util.UUID
 
 class BudgetRepository(private val dao: BudgetDao) {
