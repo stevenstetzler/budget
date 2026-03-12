@@ -152,4 +152,6 @@ class BudgetRepository(private val dao: BudgetDao) {
     fun observeAllReceiptsInRange(startEpochDay: Long, endEpochDay: Long) =
         dao.observeAllReceiptsInRange(startEpochDay, endEpochDay)
 
+    suspend fun getAllTransactions(): List<TransactionRow> = dao.getAllTransactions()
+
 }
