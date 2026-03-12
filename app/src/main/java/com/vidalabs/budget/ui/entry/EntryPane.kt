@@ -9,6 +9,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -31,6 +32,9 @@ fun EntryPane(vm: BudgetViewModel, modifier: Modifier = Modifier) {
     var showDatePicker by remember { mutableStateOf(false) }
     var showAmountDialog by remember { mutableStateOf(false) }
     var showDescriptionDialog by remember { mutableStateOf(false) }
+    var showAddCategoryDialog by remember { mutableStateOf(false) }
+    var newCategoryName by remember { mutableStateOf("") }
+    var newCategoryIsIncome by remember { mutableStateOf(false) }
 
     // --- ADDED: Snackbar State ---
     val snackbarHostState = remember { SnackbarHostState() }
@@ -113,6 +117,66 @@ fun EntryPane(vm: BudgetViewModel, modifier: Modifier = Modifier) {
         )
     }
 
+    if (showAddCategoryDialog) {
+        val focusRequester = remember { FocusRequester() }
+
+        AlertDialog(
+            onDismissRequest = {
+                newCategoryName = ""
+                newCategoryIsIncome = false
+                showAddCategoryDialog = false
+            },
+            title = { Text("Add Category") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = newCategoryName,
+                        onValueChange = { newCategoryName = it },
+                        label = { Text("Category Name") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(focusRequester)
+                    )
+                    LaunchedEffect(Unit) {
+                        focusRequester.requestFocus()
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(
+                            selected = newCategoryIsIncome,
+                            onClick = { newCategoryIsIncome = true }
+                        )
+                        Text("Income (+)")
+                        Spacer(Modifier.width(16.dp))
+                        RadioButton(
+                            selected = !newCategoryIsIncome,
+                            onClick = { newCategoryIsIncome = false }
+                        )
+                        Text("Expense (-)")
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        vm.createCategory(newCategoryName.trim(), newCategoryIsIncome)
+                        newCategoryName = ""
+                        newCategoryIsIncome = false
+                        showAddCategoryDialog = false
+                    },
+                    enabled = newCategoryName.isNotBlank()
+                ) { Text("Add") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    newCategoryName = ""
+                    newCategoryIsIncome = false
+                    showAddCategoryDialog = false
+                }) { Text("Cancel") }
+            }
+        )
+    }
+
     // Wrap content in a Scaffold or Box to overlay the Snackbar
     Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
@@ -180,6 +244,13 @@ fun EntryPane(vm: BudgetViewModel, modifier: Modifier = Modifier) {
                             }
                         )
                     }
+                    DropdownMenuItem(
+                        text = { Text("+ New category") },
+                        onClick = {
+                            categoryExpanded = false
+                            showAddCategoryDialog = true
+                        }
+                    )
                 }
             }
 
