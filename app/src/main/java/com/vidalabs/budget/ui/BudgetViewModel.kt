@@ -451,8 +451,8 @@ class BudgetViewModel(
         val descriptionIdx = header.indexOf("description")
         val isPositiveIdx = header.indexOf("ispositive")
 
-        if (dateIdx < 0 || categoryIdx < 0 || amountIdx < 0) {
-            throw IllegalArgumentException("CSV missing required columns: date, category, amount")
+        if (dateIdx < 0 || categoryIdx < 0 || amountIdx < 0 || isPositiveIdx < 0) {
+            throw IllegalArgumentException("CSV missing required columns: date, category, amount, isPositive")
         }
 
         val records = mutableListOf<ImportRecord>()
@@ -467,9 +467,8 @@ class BudgetViewModel(
                 val description = if (descriptionIdx >= 0) {
                     parts.getOrNull(descriptionIdx)?.takeIf { it.isNotBlank() }
                 } else null
-                val isPositive = if (isPositiveIdx >= 0) {
-                    parts.getOrNull(isPositiveIdx)?.trim()?.lowercase() == "true"
-                } else false
+                val isPositive = parts.getOrElse(isPositiveIdx) { "" }
+                    .trim().lowercase() == "true"
                 records.add(
                     ImportRecord(
                         date = date,

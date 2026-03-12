@@ -13,6 +13,7 @@ import com.vidalabs.budget.ui.BudgetViewModel
 import com.vidalabs.budget.ui.ImportResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun ImportBar(
@@ -22,25 +23,39 @@ fun ImportBar(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val importResult by vm.importResult.collectAsState()
+    var unsupportedFileError by remember { mutableStateOf<String?>(null) }
 
     val filePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch(Dispatchers.IO) {
-            val content = context.contentResolver.openInputStream(uri)?.use {
-                it.readBytes().toString(Charsets.UTF_8)
-            } ?: return@launch
             val mimeType = context.contentResolver.getType(uri) ?: ""
             val fileName = uri.lastPathSegment ?: ""
             val isJson = mimeType.contains("json", ignoreCase = true) ||
                 fileName.endsWith(".json", ignoreCase = true)
+            val isCsv = mimeType.contains("csv", ignoreCase = true) ||
+                mimeType.contains("comma-separated", ignoreCase = true) ||
+                fileName.endsWith(".csv", ignoreCase = true)
+
+            if (!isJson && !isCsv) {
+                withContext(Dispatchers.Main) {
+                    unsupportedFileError = "Unsupported file type. Please select a .json or .csv file."
+                }
+                return@launch
+            }
+
+            withContext(Dispatchers.Main) { unsupportedFileError = null }
+            val content = context.contentResolver.openInputStream(uri)?.use {
+                it.readBytes().toString(Charsets.UTF_8)
+            } ?: return@launch
             vm.importTransactions(content, isJson)
         }
     }
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         OutlinedButton(onClick = {
+            unsupportedFileError = null
             filePicker.launch(
                 arrayOf(
                     "application/json",
@@ -51,6 +66,14 @@ fun ImportBar(
             )
         }) {
             Text("Import file")
+        }
+
+        unsupportedFileError?.let { error ->
+            Text(
+                text = error,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
         }
 
         importResult?.let { result ->
