@@ -10,6 +10,8 @@ import com.vidalabs.budget.data.SummaryBudgetRow
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 import com.vidalabs.budget.data.CategoryTotal
 import com.vidalabs.budget.sync.SyncEvent
 import java.time.YearMonth
@@ -413,6 +415,22 @@ class BudgetViewModel(
 
     private val importJson = Json { ignoreUnknownKeys = true }
 
+    private val dateFormats = listOf(
+        DateTimeFormatter.ISO_LOCAL_DATE,           // yyyy-MM-dd
+        DateTimeFormatter.ofPattern("M/d/yyyy"),    // 3/1/2026 or 12/31/2026
+        DateTimeFormatter.ofPattern("MM/dd/yyyy"),  // 03/01/2026
+        DateTimeFormatter.ofPattern("M-d-yyyy"),    // 3-1-2026
+    )
+
+    private fun parseDate(value: String): LocalDate {
+        for (fmt in dateFormats) {
+            try {
+                return LocalDate.parse(value.trim(), fmt)
+            } catch (_: DateTimeParseException) { }
+        }
+        throw IllegalArgumentException("Unrecognized date format: '$value'. Expected formats: yyyy-MM-dd or M/d/yyyy")
+    }
+
     private fun parseImportJson(content: String): Pair<List<ImportRecord>, List<String>> {
         val trimmed = content.trim()
         val rawRecords = if (trimmed.startsWith("[")) {
@@ -426,7 +444,7 @@ class BudgetViewModel(
             try {
                 records.add(
                     ImportRecord(
-                        date = LocalDate.parse(r.date),
+                        date = parseDate(r.date),
                         category = r.category.trim(),
                         isPositive = r.isPositive,
                         amount = r.amount,
@@ -460,7 +478,7 @@ class BudgetViewModel(
         lines.drop(1).filter { it.isNotBlank() }.forEachIndexed { i, line ->
             val parts = splitCsvLine(line)
             try {
-                val date = LocalDate.parse(parts.getOrElse(dateIdx) { "" })
+                val date = parseDate(parts.getOrElse(dateIdx) { "" })
                 val category = parts.getOrElse(categoryIdx) { "" }
                     .takeIf { it.isNotBlank() } ?: throw IllegalArgumentException("empty category")
                 val amount = parts.getOrElse(amountIdx) { "" }.toDouble()
