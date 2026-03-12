@@ -26,6 +26,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import com.vidalabs.budget.ui.components.MonthYearPickerDialogWheel
 import com.vidalabs.budget.ui.components.formatMonthYear
 import com.vidalabs.budget.ui.BudgetViewModel
@@ -126,10 +130,9 @@ private fun BudgetRowCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(name, style = MaterialTheme.typography.labelLarge)
                 Text(
-                    if (isPositive) "Income category" else "Spending category",
-                    style = MaterialTheme.typography.bodySmall
+                    text = name,
+                    style = MaterialTheme.typography.labelLarge
                 )
             }
 
