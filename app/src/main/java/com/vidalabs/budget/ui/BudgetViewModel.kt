@@ -10,6 +10,7 @@ import com.vidalabs.budget.data.SummaryBudgetRow
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 import com.vidalabs.budget.data.CategoryTotal
@@ -422,13 +423,34 @@ class BudgetViewModel(
         DateTimeFormatter.ofPattern("M-d-yyyy"),    // 3-1-2026
     )
 
+    // Datetime formats tried when no date-only format matches; time part is discarded.
+    private val dateTimeFormats = listOf(
+        DateTimeFormatter.ISO_LOCAL_DATE_TIME,                          // yyyy-MM-dd'T'HH:mm:ss[.SSS]
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSS"),      // HH:MM:SS.sssss
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS"),        // HH:MM:SS.sss
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"),            // HH:MM:SS
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"),               // HH:MM
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH"),                  // HH
+        DateTimeFormatter.ofPattern("M/d/yyyy HH:mm:ss.SSSSS"),
+        DateTimeFormatter.ofPattern("M/d/yyyy HH:mm:ss.SSS"),
+        DateTimeFormatter.ofPattern("M/d/yyyy HH:mm:ss"),
+        DateTimeFormatter.ofPattern("M/d/yyyy HH:mm"),
+        DateTimeFormatter.ofPattern("M/d/yyyy HH"),
+    )
+
     private fun parseDate(value: String): LocalDate {
+        val trimmed = value.trim()
         for (fmt in dateFormats) {
             try {
-                return LocalDate.parse(value.trim(), fmt)
+                return LocalDate.parse(trimmed, fmt)
             } catch (_: DateTimeParseException) { }
         }
-        throw IllegalArgumentException("Unrecognized date format: '$value'. Expected formats: yyyy-MM-dd or M/d/yyyy")
+        for (fmt in dateTimeFormats) {
+            try {
+                return LocalDateTime.parse(trimmed, fmt).toLocalDate()
+            } catch (_: DateTimeParseException) { }
+        }
+        throw IllegalArgumentException("Unrecognized date format: '$trimmed'. Expected formats: yyyy-MM-dd, M/d/yyyy, or a datetime variant")
     }
 
     private fun parseImportJson(content: String): Pair<List<ImportRecord>, List<String>> {
