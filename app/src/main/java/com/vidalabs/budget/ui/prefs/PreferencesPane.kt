@@ -13,9 +13,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.vidalabs.budget.sync.SyncManager
+import com.vidalabs.budget.ui.BudgetViewModel
 
 @Composable
-fun PreferencesPane(sync: SyncManager, modifier: Modifier = Modifier) {
+fun PreferencesPane(vm: BudgetViewModel, sync: SyncManager, modifier: Modifier = Modifier) {
     LazyColumn(
         modifier = modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -39,6 +40,7 @@ fun PreferencesPane(sync: SyncManager, modifier: Modifier = Modifier) {
                 ) {
                     Text("Import Data", style = MaterialTheme.typography.headlineMedium)
                 }
+                ImportBar(vm = vm)
             }
         }
     }

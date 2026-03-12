@@ -114,6 +114,34 @@ class BudgetRepository(private val dao: BudgetDao) {
         dao.deleteReceipt(uid, now)
     }
 
+    /**
+     * Imports a single transaction. If [categoryName] does not exist, a new category is created
+     * using [isPositiveCategory] to determine whether it represents income or expense.
+     * If the category already exists, its existing [isPositive] value is preserved.
+     */
+    suspend fun importTransaction(
+        epochDay: Long,
+        amountPositive: Double,
+        description: String?,
+        categoryName: String,
+        isPositiveCategory: Boolean
+    ): ReceiptEntity {
+        val now = System.currentTimeMillis()
+        val cat = dao.getOrCreateCategory(categoryName, isPositiveIfCreate = isPositiveCategory)
+        val signed = if (cat.isPositive) amountPositive else -amountPositive
+        val r = ReceiptEntity(
+            uid = UUID.randomUUID().toString(),
+            epochDay = epochDay,
+            amount = signed,
+            description = description,
+            categoryUid = cat.uid,
+            updatedAt = now,
+            deleted = false
+        )
+        dao.upsertReceipt(r)
+        return r
+    }
+
     // Summary flows (updated below in DAO)
     fun observeTotalIncome(): Flow<Double> = dao.observeTotalIncome()
     fun observeSpendingByCategory(): Flow<List<CategoryTotal>> = dao.observeSpendingByCategory()

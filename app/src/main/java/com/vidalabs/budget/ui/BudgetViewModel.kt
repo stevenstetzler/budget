@@ -13,7 +13,11 @@ import java.time.LocalDate
 import com.vidalabs.budget.data.CategoryTotal
 import com.vidalabs.budget.sync.SyncEvent
 import java.time.YearMonth
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 
 data class EntryUiState(
     val date: LocalDate = LocalDate.now(),
@@ -21,6 +25,28 @@ data class EntryUiState(
     val amountText: String = "",
     val description: String = "",
     val error: String? = null
+)
+
+data class ImportResult(
+    val imported: Int,
+    val errors: List<String>
+)
+
+@Serializable
+private data class JsonImportRecord(
+    val date: String,
+    val category: String,
+    val isPositive: Boolean,
+    val amount: Double,
+    val description: String? = null
+)
+
+private data class ImportRecord(
+    val date: LocalDate,
+    val category: String,
+    val isPositive: Boolean,
+    val amount: Double,
+    val description: String?
 )
 
 fun YearMonth.toMonthKey(): Int = this.year * 100 + this.monthValue
@@ -321,5 +347,161 @@ class BudgetViewModel(
         if (t.isEmpty()) return null
         if (!Regex("""^-?\d+(\.\d{0,2})?$""").matches(t)) return null
         return t.toDoubleOrNull()
+    }
+
+    // --- Import ---
+
+    private val _importResult = MutableStateFlow<ImportResult?>(null)
+    val importResult: StateFlow<ImportResult?> = _importResult.asStateFlow()
+
+    fun dismissImportResult() {
+        _importResult.value = null
+    }
+
+    fun importTransactions(content: String, isJson: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = runImport(content, isJson)
+            withContext(Dispatchers.Main) {
+                _importResult.value = result
+            }
+        }
+    }
+
+    private suspend fun runImport(content: String, isJson: Boolean): ImportResult {
+        val (records, parseErrors) = try {
+            if (isJson) parseImportJson(content) else parseImportCsv(content)
+        } catch (e: Exception) {
+            return ImportResult(0, listOf("Parse error: ${e.message}"))
+        }
+
+        var imported = 0
+        val errors = mutableListOf<String>()
+        errors.addAll(parseErrors)
+
+        for ((i, record) in records.withIndex()) {
+            try {
+                val receipt = repo.importTransaction(
+                    epochDay = record.date.toEpochDay(),
+                    amountPositive = record.amount,
+                    description = record.description,
+                    categoryName = record.category,
+                    isPositiveCategory = record.isPositive
+                )
+                sync.push { eventId, deviceId, seq, ts ->
+                    SyncEvent.UpsertReceipt(
+                        eventId = eventId,
+                        deviceId = deviceId,
+                        seq = seq,
+                        ts = ts,
+                        uid = receipt.uid,
+                        epochDay = receipt.epochDay,
+                        amount = receipt.amount,
+                        description = receipt.description,
+                        categoryUid = receipt.categoryUid,
+                        updatedAt = receipt.updatedAt,
+                        deleted = receipt.deleted
+                    )
+                }
+                imported++
+            } catch (e: Exception) {
+                errors.add("Row ${i + 1}: ${e.message}")
+            }
+        }
+
+        return ImportResult(imported, errors)
+    }
+
+    private val importJson = Json { ignoreUnknownKeys = true }
+
+    private fun parseImportJson(content: String): Pair<List<ImportRecord>, List<String>> {
+        val trimmed = content.trim()
+        val rawRecords = if (trimmed.startsWith("[")) {
+            importJson.decodeFromString<List<JsonImportRecord>>(trimmed)
+        } else {
+            listOf(importJson.decodeFromString<JsonImportRecord>(trimmed))
+        }
+        val records = mutableListOf<ImportRecord>()
+        val errors = mutableListOf<String>()
+        rawRecords.forEachIndexed { i, r ->
+            try {
+                records.add(
+                    ImportRecord(
+                        date = LocalDate.parse(r.date),
+                        category = r.category.trim(),
+                        isPositive = r.isPositive,
+                        amount = r.amount,
+                        description = r.description?.trim()?.takeIf { it.isNotEmpty() }
+                    )
+                )
+            } catch (e: Exception) {
+                errors.add("JSON record ${i + 1}: ${e.message}")
+            }
+        }
+        return records to errors
+    }
+
+    private fun parseImportCsv(content: String): Pair<List<ImportRecord>, List<String>> {
+        val lines = content.trim().lines()
+        if (lines.isEmpty()) return emptyList<ImportRecord>() to emptyList()
+
+        val header = splitCsvLine(lines[0]).map { it.lowercase() }
+        val dateIdx = header.indexOf("date")
+        val categoryIdx = header.indexOf("category")
+        val amountIdx = header.indexOf("amount")
+        val descriptionIdx = header.indexOf("description")
+        val isPositiveIdx = header.indexOf("ispositive")
+
+        if (dateIdx < 0 || categoryIdx < 0 || amountIdx < 0) {
+            throw IllegalArgumentException("CSV missing required columns: date, category, amount")
+        }
+
+        val records = mutableListOf<ImportRecord>()
+        val errors = mutableListOf<String>()
+        lines.drop(1).filter { it.isNotBlank() }.forEachIndexed { i, line ->
+            val parts = splitCsvLine(line)
+            try {
+                val date = LocalDate.parse(parts.getOrElse(dateIdx) { "" })
+                val category = parts.getOrElse(categoryIdx) { "" }
+                    .takeIf { it.isNotBlank() } ?: throw IllegalArgumentException("empty category")
+                val amount = parts.getOrElse(amountIdx) { "" }.toDouble()
+                val description = if (descriptionIdx >= 0) {
+                    parts.getOrNull(descriptionIdx)?.takeIf { it.isNotBlank() }
+                } else null
+                val isPositive = if (isPositiveIdx >= 0) {
+                    parts.getOrNull(isPositiveIdx)?.trim()?.lowercase() == "true"
+                } else false
+                records.add(
+                    ImportRecord(
+                        date = date,
+                        category = category,
+                        isPositive = isPositive,
+                        amount = amount,
+                        description = description
+                    )
+                )
+            } catch (e: Exception) {
+                errors.add("CSV row ${i + 2}: ${e.message}")
+            }
+        }
+        return records to errors
+    }
+
+    /** Splits a single CSV line respecting double-quoted fields. */
+    private fun splitCsvLine(line: String): List<String> {
+        val result = mutableListOf<String>()
+        val current = StringBuilder()
+        var inQuotes = false
+        for (c in line) {
+            when {
+                c == '"' -> inQuotes = !inQuotes
+                c == ',' && !inQuotes -> {
+                    result.add(current.toString().trim())
+                    current.clear()
+                }
+                else -> current.append(c)
+            }
+        }
+        result.add(current.toString().trim())
+        return result
     }
 }

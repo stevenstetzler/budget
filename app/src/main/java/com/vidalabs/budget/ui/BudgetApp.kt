@@ -53,7 +53,7 @@ fun BudgetApp(vm: BudgetViewModel, sync: SyncManager, modifier: Modifier = Modif
                 1 -> SummaryPane(vm = vm, modifier = Modifier.fillMaxSize())
                 2 -> BudgetPane(vm = vm, modifier = Modifier.fillMaxSize())
                 3 -> TransactionsPane(vm = vm, modifier = Modifier.fillMaxSize())
-                4 -> PreferencesPane(sync = sync, modifier = Modifier.fillMaxSize())
+                4 -> PreferencesPane(vm = vm, sync = sync, modifier = Modifier.fillMaxSize())
             }
         }
     }
