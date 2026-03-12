@@ -121,7 +121,11 @@ fun EntryPane(vm: BudgetViewModel, modifier: Modifier = Modifier) {
         val focusRequester = remember { FocusRequester() }
 
         AlertDialog(
-            onDismissRequest = { showAddCategoryDialog = false },
+            onDismissRequest = {
+                newCategoryName = ""
+                newCategoryIsIncome = false
+                showAddCategoryDialog = false
+            },
             title = { Text("Add Category") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -155,13 +159,12 @@ fun EntryPane(vm: BudgetViewModel, modifier: Modifier = Modifier) {
             confirmButton = {
                 TextButton(
                     onClick = {
-                        if (newCategoryName.isNotBlank()) {
-                            vm.createCategory(newCategoryName.trim(), newCategoryIsIncome)
-                            newCategoryName = ""
-                            newCategoryIsIncome = false
-                            showAddCategoryDialog = false
-                        }
-                    }
+                        vm.createCategory(newCategoryName.trim(), newCategoryIsIncome)
+                        newCategoryName = ""
+                        newCategoryIsIncome = false
+                        showAddCategoryDialog = false
+                    },
+                    enabled = newCategoryName.isNotBlank()
                 ) { Text("Add") }
             },
             dismissButton = {
