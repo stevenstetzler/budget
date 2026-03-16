@@ -16,6 +16,9 @@ class BudgetRepository(private val dao: BudgetDao) {
 
     fun observeCategories(): Flow<List<CategoryEntity>> = dao.observeCategories()
 
+    fun observeCategoriesByRecentUsage(startEpochDay: Long, endEpochDay: Long): Flow<List<CategoryEntity>> =
+        dao.observeCategoriesByRecentUsage(startEpochDay, endEpochDay)
+
     fun observeSummaryTotals(): Flow<SummaryTotals> = dao.observeSummaryTotals()
 
     fun observeTotalIncomeForRange(startEpochDay: Long, endEpochDay: Long) =

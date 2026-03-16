@@ -166,6 +166,25 @@ interface BudgetDao {
     @Query("SELECT * FROM categories WHERE deleted = 0 ORDER BY isPositive DESC, name COLLATE NOCASE ASC")
     fun observeCategories(): Flow<List<CategoryEntity>>
 
+    @Query(
+        """
+    SELECT c.uid, c.name, c.isPositive, c.updatedAt, c.deleted
+    FROM categories c
+    LEFT JOIN receipts r
+        ON r.categoryUid = c.uid
+       AND r.deleted = 0
+       AND r.epochDay >= :startEpochDay
+       AND r.epochDay < :endEpochDay
+    WHERE c.deleted = 0
+    GROUP BY c.uid, c.name, c.isPositive, c.updatedAt, c.deleted
+    ORDER BY COUNT(r.uid) DESC, c.name COLLATE NOCASE ASC
+    """
+    )
+    fun observeCategoriesByRecentUsage(
+        startEpochDay: Long,
+        endEpochDay: Long
+    ): Flow<List<CategoryEntity>>
+
     // --- Receipts
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertReceipt(receipt: ReceiptEntity)
