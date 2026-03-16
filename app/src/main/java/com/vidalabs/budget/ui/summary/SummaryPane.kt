@@ -23,7 +23,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import com.vidalabs.budget.ui.components.MonthYearPickerDialogWheel
-import java.time.YearMonth
 
 @Composable
 fun SummaryPane(vm: BudgetViewModel, modifier: Modifier = Modifier) {
@@ -37,7 +36,7 @@ fun SummaryPane(vm: BudgetViewModel, modifier: Modifier = Modifier) {
     var showMonthPicker by remember { mutableStateOf(false) }
     if (showMonthPicker) {
         MonthYearPickerDialogWheel(
-            initial = YearMonth.now(),
+            initial = ym,
             onDismiss = { showMonthPicker = false },
             onConfirm = {
                 vm.setSelectedMonth(it)
