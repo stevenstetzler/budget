@@ -24,8 +24,8 @@ class BudgetRepository(private val dao: BudgetDao) {
     fun observeSpendingByCategoryForRange(startEpochDay: Long, endEpochDay: Long) =
         dao.observeSpendingByCategoryForRange(startEpochDay, endEpochDay)
 
-    fun observeBudgetRowsForMonth(monthKey: Int, prevMonthKey: Int): Flow<List<BudgetRow>> =
-        dao.observeBudgetRowsForMonth(monthKey, prevMonthKey)
+    fun observeBudgetRowsForMonth(monthKey: Int): Flow<List<BudgetRow>> =
+        dao.observeBudgetRowsForMonth(monthKey)
 
     suspend fun setBudgetValue(categoryUid: String, monthKey: Int, value: Double): BudgetItemEntity {
         val now = System.currentTimeMillis()
