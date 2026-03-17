@@ -12,4 +12,8 @@ class SyncPrefs(context: Context) {
 
     fun getFolderUri(): Uri? =
         prefs.getString("sync_folder_uri", null)?.let(Uri::parse)
+
+    fun setEndpointUrl(url: String?) = prefs.edit().putString("sync_endpoint_url", url).apply()
+
+    fun getEndpointUrl(): String? = prefs.getString("sync_endpoint_url", null)?.takeIf { it.isNotBlank() }
 }
