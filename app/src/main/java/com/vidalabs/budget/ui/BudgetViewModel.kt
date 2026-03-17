@@ -479,7 +479,7 @@ class BudgetViewModel(
                         date = parseDate(r.date),
                         category = r.category.trim(),
                         isPositive = r.isPositive,
-                        amount = r.amount,
+                        amount = abs(r.amount),
                         description = r.description?.trim()?.takeIf { it.isNotEmpty() }
                     )
                 )
@@ -513,7 +513,7 @@ class BudgetViewModel(
                 val date = parseDate(parts.getOrElse(dateIdx) { "" })
                 val category = parts.getOrElse(categoryIdx) { "" }
                     .takeIf { it.isNotBlank() } ?: throw IllegalArgumentException("empty category")
-                val amount = parts.getOrElse(amountIdx) { "" }.toDouble()
+                val amount = abs(parts.getOrElse(amountIdx) { "" }.toDouble())
                 val description = if (descriptionIdx >= 0) {
                     parts.getOrNull(descriptionIdx)?.takeIf { it.isNotBlank() }
                 } else null
@@ -581,7 +581,7 @@ class BudgetViewModel(
                 date = LocalDate.ofEpochDay(t.epochDay).format(DateTimeFormatter.ISO_LOCAL_DATE),
                 category = t.categoryName,
                 isPositive = t.isPositive,
-                amount = abs(t.amount),
+                amount = t.amount,
                 description = t.description
             )
         }
@@ -594,7 +594,7 @@ class BudgetViewModel(
         for (t in transactions) {
             val date = LocalDate.ofEpochDay(t.epochDay).format(DateTimeFormatter.ISO_LOCAL_DATE)
             val category = escapeCsvField(t.categoryName)
-            val amount = abs(t.amount)
+            val amount = t.amount
             val description = t.description?.let { escapeCsvField(it) } ?: ""
             sb.appendLine("$date,$category,$amount,$description,${t.isPositive}")
         }
