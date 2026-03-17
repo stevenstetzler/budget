@@ -15,6 +15,12 @@ local.properties
 *.jks
 *.keystore
 
+# --- PYTHON ---
+*.db
+__pycache__/
+*.egg-info/
+.venv/
+
 # --- THE "INCLUDE" SECTION (Whitelisting) ---
 # We ignore the entire gradle wrapper folder to be safe...
 gradle/wrapper/*
