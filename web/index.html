@@ -710,6 +710,8 @@
         <div style="display:flex; gap:12px; flex-wrap:wrap;">
           <button class="btn btn-outlined" id="btn-export">Export JSON</button>
           <button class="btn btn-outlined" id="btn-import-open">Import JSON</button>
+          <button class="btn btn-outlined" id="btn-export-csv">Export CSV</button>
+          <button class="btn btn-outlined" id="btn-import-csv-open">Import CSV</button>
         </div>
       </div>
 
@@ -818,6 +820,28 @@
     <div class="modal-actions">
       <button class="btn btn-outlined" id="btn-import-cancel">Cancel</button>
       <button class="btn btn-primary" id="btn-import-save">Import</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- Import CSV modal                                                    -->
+<!-- ================================================================== -->
+<div class="modal-overlay" id="modal-import-csv">
+  <div class="modal-box">
+    <div class="modal-title">Import Transactions (CSV)</div>
+    <p style="font-size:0.85rem; color:var(--on-surface-var); margin-bottom:14px;">
+      Upload a CSV file with headers: <code>date</code> (YYYY-MM-DD) or <code>epoch_day</code>,
+      <code>amount</code>, and optionally <code>description</code> and
+      <code>category_uid</code> or <code>category</code> (category name).
+    </p>
+    <div class="form-group">
+      <label for="import-csv-file">CSV File</label>
+      <input type="file" id="import-csv-file" accept=".csv,text/csv" style="margin-top:6px;">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outlined" id="btn-import-csv-cancel">Cancel</button>
+      <button class="btn btn-primary" id="btn-import-csv-save">Import</button>
     </div>
   </div>
 </div>
@@ -1397,6 +1421,102 @@ document.getElementById('btn-import-save').addEventListener('click', async () =>
     } catch { fail++; }
   }
   closeModal('modal-import');
+  showSnackbar(`Imported ${ok} transaction(s)${fail ? `, ${fail} failed` : ''}`);
+});
+
+/* Export CSV */
+document.getElementById('btn-export-csv').addEventListener('click', async () => {
+  try {
+    const [cats, txns] = await Promise.all([
+      apiFetch('/categories'),
+      apiFetch('/transactions'),
+    ]);
+    const catMap = {};
+    cats.forEach(c => { catMap[c.uid] = c.name; });
+    const header = 'uid,date,amount,description,category_uid,category_name';
+    const rows = txns.map(t => {
+      const date = new Date(t.epoch_day * 86400000).toISOString().split('T')[0];
+      const desc = (t.description || '').replace(/"/g, '""');
+      const catName = (catMap[t.category_uid] || '').replace(/"/g, '""');
+      return `${t.uid},${date},${t.amount},"${desc}",${t.category_uid},"${catName}"`;
+    });
+    const csv = [header, ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'budget-export.csv';
+    a.click();
+  } catch (e) {
+    showSnackbar('Export failed: ' + e.message);
+  }
+});
+
+/* Import CSV */
+document.getElementById('btn-import-csv-open').addEventListener('click', () => {
+  document.getElementById('import-csv-file').value = '';
+  openModal('modal-import-csv');
+});
+document.getElementById('btn-import-csv-cancel').addEventListener('click', () => closeModal('modal-import-csv'));
+
+document.getElementById('btn-import-csv-save').addEventListener('click', async () => {
+  const file = document.getElementById('import-csv-file').files[0];
+  if (!file) { showSnackbar('Please select a CSV file'); return; }
+
+  const text = await file.text();
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+  if (lines.length < 2) { showSnackbar('CSV file is empty or has no data rows'); return; }
+
+  function parseCsvLine(line) {
+    const result = [];
+    let cur = '', inQuote = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        if (inQuote && line[i + 1] === '"') { cur += '"'; i++; }
+        else { inQuote = !inQuote; }
+      } else if (ch === ',' && !inQuote) {
+        result.push(cur); cur = '';
+      } else {
+        cur += ch;
+      }
+    }
+    result.push(cur);
+    return result;
+  }
+
+  const headers = parseCsvLine(lines[0]).map(h => h.trim().toLowerCase());
+  const cats = await apiFetch('/categories').catch(() => []);
+  const catNameMap = {};
+  cats.forEach(c => { catNameMap[c.name.toLowerCase()] = c.uid; });
+
+  let ok = 0, fail = 0;
+  for (let i = 1; i < lines.length; i++) {
+    const cols = parseCsvLine(lines[i]);
+    const row = {};
+    headers.forEach((h, idx) => { row[h] = (cols[idx] || '').trim(); });
+
+    let epoch_day;
+    if (row.epoch_day !== undefined && row.epoch_day !== '') {
+      epoch_day = parseInt(row.epoch_day, 10);
+    } else if (row.date) {
+      epoch_day = Math.floor(new Date(row.date + 'T00:00:00Z').getTime() / 86400000);
+    }
+    const amount = parseFloat(row.amount);
+    let category_uid = row.category_uid || '';
+    if (!category_uid && row.category) {
+      category_uid = catNameMap[row.category.toLowerCase()] || '';
+    }
+
+    if (epoch_day === undefined || epoch_day === null || isNaN(epoch_day) || isNaN(amount) || !category_uid) { fail++; continue; }
+
+    const txn = { epoch_day, amount, category_uid };
+    if (row.description) txn.description = row.description;
+    try {
+      await apiFetch('/transactions', { method: 'POST', body: JSON.stringify(txn) });
+      ok++;
+    } catch { fail++; }
+  }
+  closeModal('modal-import-csv');
   showSnackbar(`Imported ${ok} transaction(s)${fail ? `, ${fail} failed` : ''}`);
 });
 
