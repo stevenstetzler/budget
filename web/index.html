@@ -1,0 +1,1452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Budget</title>
+  <style>
+    /* ------------------------------------------------------------------ */
+    /* Reset & base                                                         */
+    /* ------------------------------------------------------------------ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --primary:        #6750A4;
+      --primary-light:  #EADDFF;
+      --on-primary:     #FFFFFF;
+      --surface:        #FFFBFE;
+      --surface-var:    #F5F0FF;
+      --outline:        #79747E;
+      --outline-light:  #CAC4D0;
+      --on-surface:     #1C1B1F;
+      --on-surface-var: #49454F;
+      --success:        #2E7D32;
+      --success-bg:     #C8E6C9;
+      --error:          #B3261E;
+      --error-bg:       #F9DEDC;
+      --tab-h:          48px;
+      --topbar-h:       56px;
+    }
+
+    html, body {
+      height: 100%;
+      font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: var(--surface);
+      color: var(--on-surface);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Layout shell                                                         */
+    /* ------------------------------------------------------------------ */
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Top bar                                                              */
+    /* ------------------------------------------------------------------ */
+    #topbar {
+      display: flex;
+      align-items: center;
+      height: var(--topbar-h);
+      padding: 0 16px;
+      background: var(--primary);
+      color: var(--on-primary);
+      flex-shrink: 0;
+      gap: 8px;
+    }
+
+    #topbar h1 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      flex: 1;
+      letter-spacing: 0.01em;
+    }
+
+    #btn-prefs {
+      background: none;
+      border: none;
+      color: var(--on-primary);
+      cursor: pointer;
+      padding: 6px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      transition: background 0.15s;
+    }
+    #btn-prefs:hover { background: rgba(255,255,255,0.15); }
+
+    /* ------------------------------------------------------------------ */
+    /* Tab bar                                                              */
+    /* ------------------------------------------------------------------ */
+    #tabbar {
+      display: flex;
+      background: var(--primary);
+      flex-shrink: 0;
+      border-bottom: 2px solid var(--primary-light);
+    }
+
+    .tab-btn {
+      flex: 1;
+      height: var(--tab-h);
+      border: none;
+      background: none;
+      color: rgba(255,255,255,0.72);
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      position: relative;
+      transition: color 0.15s;
+    }
+
+    .tab-btn.active {
+      color: var(--on-primary);
+    }
+
+    .tab-btn.active::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 3px;
+      background: var(--on-primary);
+      border-radius: 3px 3px 0 0;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Pane container                                                       */
+    /* ------------------------------------------------------------------ */
+    #panes {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .pane {
+      display: none;
+      position: absolute;
+      inset: 0;
+      overflow-y: auto;
+      padding: 16px;
+    }
+
+    .pane.active { display: block; }
+
+    /* ------------------------------------------------------------------ */
+    /* Month selector                                                       */
+    /* ------------------------------------------------------------------ */
+    .month-row {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      margin-bottom: 16px;
+      gap: 8px;
+    }
+
+    .month-nav {
+      background: none;
+      border: 1px solid var(--outline-light);
+      border-radius: 50%;
+      width: 32px; height: 32px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      font-size: 1rem;
+      color: var(--primary);
+      transition: background 0.15s;
+    }
+    .month-nav:hover { background: var(--primary-light); }
+
+    .month-label {
+      font-size: 0.95rem;
+      font-weight: 500;
+      min-width: 110px;
+      text-align: center;
+      color: var(--on-surface);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Cards                                                                */
+    /* ------------------------------------------------------------------ */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--outline-light);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+
+    .card-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--on-surface-var);
+      margin-bottom: 12px;
+    }
+
+    /* Cash-flow card */
+    .cashflow-card {
+      background: var(--surface-var);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .cf-block { text-align: center; }
+    .cf-label { font-size: 0.75rem; color: var(--on-surface-var); margin-bottom: 4px; }
+    .cf-amount { font-size: 1.5rem; font-weight: 700; }
+    .cf-divider { width: 1px; background: var(--outline-light); align-self: stretch; }
+    .positive { color: var(--success); }
+    .negative { color: var(--error); }
+
+    /* Summary category rows */
+    .summary-section-title {
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--on-surface-var);
+      margin: 16px 0 8px;
+    }
+
+    .cat-row {
+      display: flex;
+      align-items: center;
+      padding: 10px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.12s;
+      border-bottom: 1px solid var(--outline-light);
+      background: var(--surface);
+    }
+    .cat-row:last-child { border-bottom: none; }
+    .cat-row:hover { background: var(--surface-var); }
+
+    .cat-name { flex: 1; font-size: 0.95rem; text-transform: capitalize; }
+
+    .cat-amounts {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 2px;
+    }
+
+    .cat-actual { font-size: 0.95rem; font-weight: 600; }
+    .cat-budget { font-size: 0.75rem; color: var(--on-surface-var); }
+
+    .cat-expand-icon {
+      margin-left: 8px;
+      color: var(--on-surface-var);
+      transition: transform 0.2s;
+      font-size: 1rem;
+    }
+    .cat-row.expanded .cat-expand-icon { transform: rotate(180deg); }
+
+    .receipts-list {
+      display: none;
+      padding: 6px 12px 10px 12px;
+      background: var(--surface-var);
+      border-radius: 0 0 8px 8px;
+      margin-bottom: 1px;
+    }
+    .receipts-list.open { display: block; }
+
+    .receipt-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 0;
+      font-size: 0.85rem;
+      border-bottom: 1px solid var(--outline-light);
+    }
+    .receipt-item:last-child { border-bottom: none; }
+    .receipt-date { color: var(--on-surface-var); min-width: 72px; }
+    .receipt-desc { flex: 1; padding: 0 8px; color: var(--on-surface); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .receipt-amt  { font-weight: 600; white-space: nowrap; }
+
+    /* ------------------------------------------------------------------ */
+    /* Entry form                                                           */
+    /* ------------------------------------------------------------------ */
+    .form-group {
+      margin-bottom: 14px;
+    }
+
+    label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--on-surface-var);
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    input[type="text"],
+    input[type="number"],
+    input[type="date"],
+    input[type="url"],
+    select,
+    textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--outline-light);
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-family: inherit;
+      background: var(--surface);
+      color: var(--on-surface);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--primary);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Buttons                                                              */
+    /* ------------------------------------------------------------------ */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 24px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: 0.04em;
+      transition: opacity 0.15s, box-shadow 0.15s;
+    }
+    .btn:hover { opacity: 0.88; }
+
+    .btn-primary   { background: var(--primary); color: var(--on-primary); }
+    .btn-outlined  { background: none; border: 1px solid var(--outline-light); color: var(--primary); }
+    .btn-danger    { background: var(--error); color: #fff; }
+    .btn-full      { width: 100%; justify-content: center; }
+
+    /* ------------------------------------------------------------------ */
+    /* Budget pane - editable rows                                         */
+    /* ------------------------------------------------------------------ */
+    .budget-row {
+      display: flex;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--outline-light);
+      gap: 12px;
+    }
+    .budget-row:last-child { border-bottom: none; }
+    .budget-cat-name { flex: 1; font-size: 0.95rem; text-transform: capitalize; }
+    .budget-input {
+      width: 130px;
+      text-align: right;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Transactions pane                                                    */
+    /* ------------------------------------------------------------------ */
+    .txn-card {
+      display: flex;
+      flex-direction: column;
+      padding: 12px;
+      border: 1px solid var(--outline-light);
+      border-radius: 10px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      transition: background 0.12s;
+      background: var(--surface);
+    }
+    .txn-card:hover { background: var(--surface-var); }
+
+    .txn-top {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .txn-cat-name  { font-size: 0.85rem; font-weight: 600; text-transform: capitalize; }
+    .txn-badge {
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .badge-income  { background: var(--success-bg); color: var(--success); }
+    .badge-expense { background: var(--error-bg);   color: var(--error);   }
+
+    .txn-date { font-size: 0.8rem; color: var(--on-surface-var); }
+    .txn-amount { margin-left: auto; font-size: 1.1rem; font-weight: 700; }
+
+    .txn-desc {
+      margin-top: 4px;
+      font-size: 0.85rem;
+      color: var(--on-surface-var);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Empty state                                                         */
+    /* ------------------------------------------------------------------ */
+    .empty-state {
+      text-align: center;
+      padding: 48px 16px;
+      color: var(--on-surface-var);
+    }
+    .empty-state svg { margin-bottom: 12px; opacity: 0.4; }
+    .empty-state p { font-size: 0.95rem; }
+
+    /* ------------------------------------------------------------------ */
+    /* Snackbar                                                             */
+    /* ------------------------------------------------------------------ */
+    #snackbar {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: #323232;
+      color: #fff;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      z-index: 9999;
+      transition: transform 0.3s ease;
+      pointer-events: none;
+    }
+    #snackbar.show { transform: translateX(-50%) translateY(0); }
+
+    /* ------------------------------------------------------------------ */
+    /* Modal / Dialog                                                       */
+    /* ------------------------------------------------------------------ */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 500;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+
+    .modal-box {
+      background: var(--surface);
+      border-radius: 16px;
+      padding: 24px;
+      width: min(480px, calc(100vw - 32px));
+      max-height: calc(100vh - 64px);
+      overflow-y: auto;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    }
+
+    .modal-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 20px;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 20px;
+    }
+
+    .modal-actions-split {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 20px;
+    }
+
+    /* Radio group for income/expense toggle */
+    .radio-group {
+      display: flex;
+      gap: 16px;
+      margin-top: 6px;
+    }
+    .radio-group label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      text-transform: none;
+      font-size: 0.9rem;
+      cursor: pointer;
+      letter-spacing: 0;
+    }
+
+    /* Preferences */
+    .pref-section { margin-bottom: 24px; }
+    .pref-section-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--on-surface-var);
+      margin-bottom: 10px;
+    }
+    .pref-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--outline-light);
+    }
+    .pref-row:last-child { border-bottom: none; }
+    .pref-label { flex: 1; font-size: 0.9rem; }
+    .pref-value { font-size: 0.85rem; color: var(--on-surface-var); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* ------------------------------------------------------------------ */
+    /* Spinner / loading                                                    */
+    /* ------------------------------------------------------------------ */
+    .spinner {
+      display: inline-block;
+      width: 24px; height: 24px;
+      border: 3px solid var(--primary-light);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-row {
+      display: flex;
+      justify-content: center;
+      padding: 32px;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Error banner                                                         */
+    /* ------------------------------------------------------------------ */
+    .error-banner {
+      background: var(--error-bg);
+      color: var(--error);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      margin-bottom: 14px;
+      display: none;
+    }
+    .error-banner.show { display: block; }
+  </style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ================================================================ -->
+  <!-- Top bar                                                           -->
+  <!-- ================================================================ -->
+  <header id="topbar">
+    <h1>Budget</h1>
+    <button id="btn-prefs" title="Preferences" aria-label="Preferences">
+      <!-- Settings gear icon -->
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7.02 7.02 0 0 0-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84a.48.48 0 0 0-.47.41l-.36 2.54a7.06 7.06 0 0 0-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.74 8.87a.48.48 0 0 0 .12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.3.59.22l2.39-.96c.5.36 1.04.67 1.62.94l.36 2.54c.05.24.27.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.58-.27 1.11-.58 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.01-1.58zM12 15.6a3.6 3.6 0 1 1 0-7.2 3.6 3.6 0 0 1 0 7.2z"/>
+      </svg>
+    </button>
+  </header>
+
+  <!-- ================================================================ -->
+  <!-- Tab bar                                                           -->
+  <!-- ================================================================ -->
+  <nav id="tabbar">
+    <button class="tab-btn active" data-pane="entry">Entry</button>
+    <button class="tab-btn" data-pane="summary">Summary</button>
+    <button class="tab-btn" data-pane="budget">Budget</button>
+    <button class="tab-btn" data-pane="receipts">Receipts</button>
+  </nav>
+
+  <!-- ================================================================ -->
+  <!-- Panes                                                             -->
+  <!-- ================================================================ -->
+  <main id="panes">
+
+    <!-- ============================================================== -->
+    <!-- ENTRY pane                                                      -->
+    <!-- ============================================================== -->
+    <section id="pane-entry" class="pane active">
+      <div class="error-banner" id="entry-error"></div>
+
+      <div class="form-group">
+        <label for="entry-date">Date</label>
+        <input type="date" id="entry-date" />
+      </div>
+
+      <div class="form-group">
+        <label for="entry-category">Category</label>
+        <select id="entry-category">
+          <option value="">Loading…</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="entry-amount">Amount</label>
+        <input type="number" id="entry-amount" min="0" step="0.01" placeholder="0.00" />
+      </div>
+
+      <div class="form-group">
+        <label for="entry-description">Description (optional)</label>
+        <input type="text" id="entry-description" placeholder="e.g. Whole Foods" maxlength="200" />
+      </div>
+
+      <button class="btn btn-primary btn-full" id="btn-add-txn">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+        Add Transaction
+      </button>
+
+      <div style="margin-top:24px; border-top:1px solid var(--outline-light); padding-top:16px;">
+        <button class="btn btn-outlined" id="btn-new-category">+ New Category</button>
+      </div>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- SUMMARY pane                                                    -->
+    <!-- ============================================================== -->
+    <section id="pane-summary" class="pane">
+
+      <div class="month-row">
+        <button class="month-nav" id="summary-prev">&#8249;</button>
+        <span class="month-label" id="summary-month-label">–</span>
+        <button class="month-nav" id="summary-next">&#8250;</button>
+      </div>
+
+      <!-- Cash flow card -->
+      <div class="cashflow-card" id="summary-cashflow">
+        <div class="cf-block">
+          <div class="cf-label">Income</div>
+          <div class="cf-amount positive" id="cf-income">$0.00</div>
+        </div>
+        <div class="cf-divider"></div>
+        <div class="cf-block">
+          <div class="cf-label">Net</div>
+          <div class="cf-amount" id="cf-net">$0.00</div>
+        </div>
+        <div class="cf-divider"></div>
+        <div class="cf-block">
+          <div class="cf-label">Spending</div>
+          <div class="cf-amount negative" id="cf-spending">$0.00</div>
+        </div>
+      </div>
+
+      <div id="summary-income-section">
+        <div class="summary-section-title">Income</div>
+        <div class="card" id="summary-income-list" style="padding:0 8px;"></div>
+      </div>
+
+      <div id="summary-spending-section">
+        <div class="summary-section-title">Spending</div>
+        <div class="card" id="summary-spending-list" style="padding:0 8px;"></div>
+      </div>
+
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- BUDGET pane                                                     -->
+    <!-- ============================================================== -->
+    <section id="pane-budget" class="pane">
+
+      <div class="month-row">
+        <button class="month-nav" id="budget-prev">&#8249;</button>
+        <span class="month-label" id="budget-month-label">–</span>
+        <button class="month-nav" id="budget-next">&#8250;</button>
+      </div>
+
+      <div class="card" id="budget-income-card">
+        <div class="card-title">Income</div>
+        <div id="budget-income-list"></div>
+      </div>
+
+      <div class="card" id="budget-spending-card">
+        <div class="card-title">Spending</div>
+        <div id="budget-spending-list"></div>
+      </div>
+
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- RECEIPTS pane                                                   -->
+    <!-- ============================================================== -->
+    <section id="pane-receipts" class="pane">
+
+      <div class="month-row">
+        <button class="month-nav" id="receipts-prev">&#8249;</button>
+        <span class="month-label" id="receipts-month-label">–</span>
+        <button class="month-nav" id="receipts-next">&#8250;</button>
+      </div>
+
+      <div id="receipts-list"></div>
+
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- PREFERENCES pane                                               -->
+    <!-- ============================================================== -->
+    <section id="pane-prefs" class="pane">
+
+      <div class="pref-section">
+        <div class="pref-section-title">API Connection</div>
+        <div class="pref-row">
+          <span class="pref-label">Endpoint URL</span>
+          <span class="pref-value" id="pref-url-display">not set</span>
+        </div>
+        <div style="margin-top:12px;">
+          <button class="btn btn-outlined" id="btn-change-url">Change Endpoint URL</button>
+        </div>
+      </div>
+
+      <div class="pref-section">
+        <div class="pref-section-title">Data</div>
+        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+          <button class="btn btn-outlined" id="btn-export">Export JSON</button>
+          <button class="btn btn-outlined" id="btn-import-open">Import JSON</button>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+</div>
+
+<!-- ================================================================== -->
+<!-- Snackbar                                                            -->
+<!-- ================================================================== -->
+<div id="snackbar"></div>
+
+<!-- ================================================================== -->
+<!-- New Category modal                                                  -->
+<!-- ================================================================== -->
+<div class="modal-overlay" id="modal-new-cat">
+  <div class="modal-box">
+    <div class="modal-title">New Category</div>
+    <div class="form-group">
+      <label for="new-cat-name">Name</label>
+      <input type="text" id="new-cat-name" placeholder="e.g. coffee" maxlength="100" />
+    </div>
+    <div class="form-group">
+      <label>Type</label>
+      <div class="radio-group">
+        <label><input type="radio" name="new-cat-type" value="expense" checked /> Expense</label>
+        <label><input type="radio" name="new-cat-type" value="income" /> Income</label>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outlined" id="btn-new-cat-cancel">Cancel</button>
+      <button class="btn btn-primary" id="btn-new-cat-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- Edit Transaction modal                                              -->
+<!-- ================================================================== -->
+<div class="modal-overlay" id="modal-edit-txn">
+  <div class="modal-box">
+    <div class="modal-title">Edit Transaction</div>
+    <input type="hidden" id="edit-txn-uid" />
+    <div class="form-group">
+      <label for="edit-txn-date">Date</label>
+      <input type="date" id="edit-txn-date" />
+    </div>
+    <div class="form-group">
+      <label for="edit-txn-category">Category</label>
+      <select id="edit-txn-category"></select>
+    </div>
+    <div class="form-group">
+      <label for="edit-txn-amount">Amount</label>
+      <input type="number" id="edit-txn-amount" min="0" step="0.01" />
+    </div>
+    <div class="form-group">
+      <label for="edit-txn-description">Description</label>
+      <input type="text" id="edit-txn-description" maxlength="200" />
+    </div>
+    <div class="modal-actions-split">
+      <button class="btn btn-danger" id="btn-delete-txn">Delete</button>
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-outlined" id="btn-edit-txn-cancel">Cancel</button>
+        <button class="btn btn-primary" id="btn-edit-txn-save">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- Change endpoint URL modal                                           -->
+<!-- ================================================================== -->
+<div class="modal-overlay" id="modal-url">
+  <div class="modal-box">
+    <div class="modal-title">API Endpoint URL</div>
+    <div class="form-group">
+      <label for="url-input">Base URL</label>
+      <input type="url" id="url-input" placeholder="http://localhost:5000" />
+    </div>
+    <p style="font-size:0.8rem; color:var(--on-surface-var); margin-top:-8px; margin-bottom:12px;">
+      The app will connect to <code>&lt;url&gt;/budget/api/…</code>
+    </p>
+    <div class="modal-actions">
+      <button class="btn btn-outlined" id="btn-url-cancel">Cancel</button>
+      <button class="btn btn-primary" id="btn-url-save">Save &amp; Reload</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<!-- Import JSON modal                                                   -->
+<!-- ================================================================== -->
+<div class="modal-overlay" id="modal-import">
+  <div class="modal-box">
+    <div class="modal-title">Import Transactions (JSON)</div>
+    <p style="font-size:0.85rem; color:var(--on-surface-var); margin-bottom:14px;">
+      Paste a JSON array of transactions. Each object must have:
+      <code>epoch_day</code>, <code>amount</code>, <code>category_uid</code>,
+      and optionally <code>description</code>.
+    </p>
+    <div class="form-group">
+      <label for="import-json">JSON</label>
+      <textarea id="import-json" rows="8" style="font-family:monospace; font-size:0.8rem;"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outlined" id="btn-import-cancel">Cancel</button>
+      <button class="btn btn-primary" id="btn-import-save">Import</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ========================================================================= */
+/* State & config                                                             */
+/* ========================================================================= */
+
+const LS_URL_KEY = 'budget_api_url';
+
+let apiBase = (localStorage.getItem(LS_URL_KEY) || '').replace(/\/$/, '');
+let categories = [];  // [{uid, name, is_positive}]
+
+// Per-pane month state (YYYYMM int)
+function currentMonthKey() {
+  const now = new Date();
+  return now.getFullYear() * 100 + (now.getMonth() + 1);
+}
+
+const state = {
+  summary:  { month: currentMonthKey() },
+  budget:   { month: currentMonthKey() },
+  receipts: { month: currentMonthKey() },
+};
+
+/* ========================================================================= */
+/* Utilities                                                                  */
+/* ========================================================================= */
+
+function fmtMoney(v, signed = false) {
+  const abs = Math.abs(v);
+  const formatted = abs.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+  if (signed && v < 0) return '−' + formatted;
+  return formatted;
+}
+
+function epochDayToDate(d) {
+  const ms = d * 86400000;
+  return new Date(ms);
+}
+
+function dateToEpochDay(dateStr) {
+  const [y, m, day] = dateStr.split('-').map(Number);
+  return Math.floor(Date.UTC(y, m - 1, day) / 86400000);
+}
+
+function epochDayToStr(d) {
+  const dt = epochDayToDate(d);
+  return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+
+function monthKeyToLabel(mk) {
+  const y = Math.floor(mk / 100);
+  const m = mk % 100;
+  return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
+
+function prevMonth(mk) {
+  let y = Math.floor(mk / 100), m = mk % 100;
+  m--; if (m < 1) { m = 12; y--; }
+  return y * 100 + m;
+}
+
+function nextMonth(mk) {
+  let y = Math.floor(mk / 100), m = mk % 100;
+  m++; if (m > 12) { m = 1; y++; }
+  return y * 100 + m;
+}
+
+function todayStr() {
+  const d = new Date();
+  return d.toISOString().split('T')[0];
+}
+
+function showSnackbar(msg, duration = 3000) {
+  const sb = document.getElementById('snackbar');
+  sb.textContent = msg;
+  sb.classList.add('show');
+  setTimeout(() => sb.classList.remove('show'), duration);
+}
+
+function openModal(id)  { document.getElementById(id).classList.add('open');  }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+/* ========================================================================= */
+/* API calls                                                                  */
+/* ========================================================================= */
+
+async function apiFetch(path, opts = {}) {
+  const url = apiBase + '/budget/api' + path;
+  const res = await fetch(url, {
+    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+    ...opts,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`API error ${res.status}: ${text}`);
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+async function loadCategories() {
+  categories = await apiFetch('/categories');
+  return categories;
+}
+
+async function loadTransactions(monthKey) {
+  return apiFetch(`/transactions?month=${monthKey}`);
+}
+
+async function loadBudgetItems(monthKey) {
+  return apiFetch(`/budget-items?month=${monthKey}`);
+}
+
+/* ========================================================================= */
+/* Populate category <select> elements                                        */
+/* ========================================================================= */
+
+function populateCategorySelect(selectEl, selectedUid = null) {
+  selectEl.innerHTML = '';
+  const opt0 = document.createElement('option');
+  opt0.value = '';
+  opt0.textContent = '— select —';
+  selectEl.appendChild(opt0);
+  categories.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c.uid;
+    o.textContent = c.name + (c.is_positive ? ' (income)' : '');
+    if (c.uid === selectedUid) o.selected = true;
+    selectEl.appendChild(o);
+  });
+}
+
+/* ========================================================================= */
+/* ENTRY pane                                                                 */
+/* ========================================================================= */
+
+function initEntryPane() {
+  document.getElementById('entry-date').value = todayStr();
+  populateCategorySelect(document.getElementById('entry-category'));
+}
+
+document.getElementById('btn-add-txn').addEventListener('click', async () => {
+  const err = document.getElementById('entry-error');
+  err.classList.remove('show');
+
+  const dateVal = document.getElementById('entry-date').value;
+  const catUid  = document.getElementById('entry-category').value;
+  const amtVal  = parseFloat(document.getElementById('entry-amount').value);
+  const desc    = document.getElementById('entry-description').value.trim() || null;
+
+  if (!dateVal) { err.textContent = 'Please select a date.'; err.classList.add('show'); return; }
+  if (!catUid)  { err.textContent = 'Please select a category.'; err.classList.add('show'); return; }
+  if (isNaN(amtVal) || amtVal <= 0) { err.textContent = 'Please enter a valid amount greater than 0.'; err.classList.add('show'); return; }
+
+  const cat = categories.find(c => c.uid === catUid);
+  const signedAmount = cat.is_positive ? Math.abs(amtVal) : -Math.abs(amtVal);
+
+  try {
+    await apiFetch('/transactions', {
+      method: 'POST',
+      body: JSON.stringify({
+        epoch_day: dateToEpochDay(dateVal),
+        amount: signedAmount,
+        category_uid: catUid,
+        description: desc,
+      }),
+    });
+    // Reset
+    document.getElementById('entry-date').value = todayStr();
+    document.getElementById('entry-category').value = '';
+    document.getElementById('entry-amount').value = '';
+    document.getElementById('entry-description').value = '';
+    showSnackbar('Transaction added successfully');
+  } catch (e) {
+    err.textContent = 'Failed to save: ' + e.message;
+    err.classList.add('show');
+  }
+});
+
+/* ------------------------------------------------------------------ */
+/* New Category modal                                                  */
+/* ------------------------------------------------------------------ */
+
+document.getElementById('btn-new-category').addEventListener('click', () => {
+  document.getElementById('new-cat-name').value = '';
+  document.querySelector('input[name="new-cat-type"][value="expense"]').checked = true;
+  openModal('modal-new-cat');
+});
+document.getElementById('btn-new-cat-cancel').addEventListener('click', () => closeModal('modal-new-cat'));
+
+document.getElementById('btn-new-cat-save').addEventListener('click', async () => {
+  const name = document.getElementById('new-cat-name').value.trim().toLowerCase();
+  const type = document.querySelector('input[name="new-cat-type"]:checked').value;
+  if (!name) { showSnackbar('Category name is required'); return; }
+
+  try {
+    await apiFetch('/categories', {
+      method: 'POST',
+      body: JSON.stringify({ name, is_positive: type === 'income' }),
+    });
+    await loadCategories();
+    populateCategorySelect(document.getElementById('entry-category'));
+    populateCategorySelect(document.getElementById('edit-txn-category'));
+    closeModal('modal-new-cat');
+    showSnackbar('Category "' + name + '" created');
+  } catch (e) {
+    showSnackbar('Error: ' + e.message);
+  }
+});
+
+/* ========================================================================= */
+/* SUMMARY pane                                                               */
+/* ========================================================================= */
+
+document.getElementById('summary-prev').addEventListener('click', () => {
+  state.summary.month = prevMonth(state.summary.month);
+  renderSummary();
+});
+document.getElementById('summary-next').addEventListener('click', () => {
+  state.summary.month = nextMonth(state.summary.month);
+  renderSummary();
+});
+
+async function renderSummary() {
+  const mk = state.summary.month;
+  document.getElementById('summary-month-label').textContent = monthKeyToLabel(mk);
+
+  const [txns, budgetItems] = await Promise.all([
+    loadTransactions(mk),
+    loadBudgetItems(mk),
+  ]);
+
+  // Compute totals
+  let totalIncome = 0, totalSpending = 0;
+  const catActuals = {};  // uid → sum (signed)
+  txns.forEach(t => {
+    catActuals[t.category_uid] = (catActuals[t.category_uid] || 0) + t.amount;
+    if (t.amount > 0) totalIncome += t.amount;
+    else totalSpending += Math.abs(t.amount);
+  });
+
+  const net = totalIncome - totalSpending;
+  document.getElementById('cf-income').textContent   = fmtMoney(totalIncome);
+  document.getElementById('cf-spending').textContent = fmtMoney(totalSpending);
+  const netEl = document.getElementById('cf-net');
+  netEl.textContent = fmtMoney(net, true);
+  netEl.className = 'cf-amount ' + (net >= 0 ? 'positive' : 'negative');
+
+  const budgetByUid = {};
+  budgetItems.forEach(b => { budgetByUid[b.category_uid] = b.value; });
+
+  // Group transactions by category for expand
+  const txnsByCategory = {};
+  txns.forEach(t => {
+    if (!txnsByCategory[t.category_uid]) txnsByCategory[t.category_uid] = [];
+    txnsByCategory[t.category_uid].push(t);
+  });
+
+  const incomeList   = document.getElementById('summary-income-list');
+  const spendingList = document.getElementById('summary-spending-list');
+  incomeList.innerHTML   = '';
+  spendingList.innerHTML = '';
+
+  const incomeCats   = categories.filter(c => c.is_positive);
+  const spendingCats = categories.filter(c => !c.is_positive);
+
+  function buildCatRow(cat) {
+    const actual  = catActuals[cat.uid] || 0;
+    const budget  = budgetByUid[cat.uid] || 0;
+    const displayActual = Math.abs(actual);
+    const isOver  = budget > 0 && displayActual > budget;
+    const wrapper = document.createElement('div');
+
+    const row = document.createElement('div');
+    row.className = 'cat-row';
+    row.innerHTML = `
+      <span class="cat-name">${cat.name}</span>
+      <span class="cat-amounts">
+        <span class="cat-actual ${cat.is_positive ? 'positive' : (isOver ? 'negative' : '')}">${fmtMoney(displayActual)}</span>
+        ${budget ? `<span class="cat-budget">of ${fmtMoney(budget)}</span>` : ''}
+      </span>
+      <span class="cat-expand-icon">&#9660;</span>
+    `;
+
+    const txList = document.createElement('div');
+    txList.className = 'receipts-list';
+
+    const catTxns = txnsByCategory[cat.uid] || [];
+    if (catTxns.length === 0) {
+      txList.innerHTML = '<p style="font-size:0.8rem;color:var(--on-surface-var);padding:4px 0;">No transactions</p>';
+    } else {
+      catTxns.forEach(t => {
+        const item = document.createElement('div');
+        item.className = 'receipt-item';
+        item.innerHTML = `
+          <span class="receipt-date">${epochDayToStr(t.epoch_day)}</span>
+          <span class="receipt-desc">${t.description || ''}</span>
+          <span class="receipt-amt ${t.amount >= 0 ? 'positive' : 'negative'}">${fmtMoney(Math.abs(t.amount))}</span>
+        `;
+        txList.appendChild(item);
+      });
+    }
+
+    row.addEventListener('click', () => {
+      const open = txList.classList.toggle('open');
+      row.classList.toggle('expanded', open);
+    });
+
+    wrapper.appendChild(row);
+    wrapper.appendChild(txList);
+    return wrapper;
+  }
+
+  if (incomeCats.length === 0) {
+    incomeList.innerHTML = '<p style="padding:12px;color:var(--on-surface-var);font-size:0.85rem;">No income categories</p>';
+  } else {
+    incomeCats.forEach(c => incomeList.appendChild(buildCatRow(c)));
+  }
+
+  if (spendingCats.length === 0) {
+    spendingList.innerHTML = '<p style="padding:12px;color:var(--on-surface-var);font-size:0.85rem;">No spending categories</p>';
+  } else {
+    spendingCats.forEach(c => spendingList.appendChild(buildCatRow(c)));
+  }
+}
+
+/* ========================================================================= */
+/* BUDGET pane                                                                */
+/* ========================================================================= */
+
+document.getElementById('budget-prev').addEventListener('click', () => {
+  state.budget.month = prevMonth(state.budget.month);
+  renderBudget();
+});
+document.getElementById('budget-next').addEventListener('click', () => {
+  state.budget.month = nextMonth(state.budget.month);
+  renderBudget();
+});
+
+async function renderBudget() {
+  const mk = state.budget.month;
+  document.getElementById('budget-month-label').textContent = monthKeyToLabel(mk);
+
+  const items = await loadBudgetItems(mk);
+  const byUid = {};
+  items.forEach(b => { byUid[b.category_uid] = b.value; });
+
+  const incomeList   = document.getElementById('budget-income-list');
+  const spendingList = document.getElementById('budget-spending-list');
+  incomeList.innerHTML   = '';
+  spendingList.innerHTML = '';
+
+  function buildBudgetRow(cat) {
+    const row = document.createElement('div');
+    row.className = 'budget-row';
+    const val = byUid[cat.uid] !== undefined ? byUid[cat.uid] : '';
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'budget-cat-name';
+    nameSpan.textContent = cat.name;
+
+    const inp = document.createElement('input');
+    inp.type = 'number';
+    inp.min = '0';
+    inp.step = '0.01';
+    inp.className = 'budget-input';
+    inp.value = val !== '' ? val : '';
+    inp.placeholder = '0.00';
+
+    let debounceTimer;
+    inp.addEventListener('input', () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(async () => {
+        const v = parseFloat(inp.value);
+        if (!isNaN(v) && v >= 0) {
+          try {
+            await apiFetch('/budget-items', {
+              method: 'PUT',
+              body: JSON.stringify({ category_uid: cat.uid, month_key: mk, value: v }),
+            });
+          } catch (e) {
+            showSnackbar('Save failed: ' + e.message);
+          }
+        }
+      }, 600);
+    });
+
+    row.appendChild(nameSpan);
+    row.appendChild(inp);
+    return row;
+  }
+
+  categories.filter(c =>  c.is_positive).forEach(c => incomeList.appendChild(buildBudgetRow(c)));
+  categories.filter(c => !c.is_positive).forEach(c => spendingList.appendChild(buildBudgetRow(c)));
+}
+
+/* ========================================================================= */
+/* RECEIPTS pane                                                              */
+/* ========================================================================= */
+
+document.getElementById('receipts-prev').addEventListener('click', () => {
+  state.receipts.month = prevMonth(state.receipts.month);
+  renderReceipts();
+});
+document.getElementById('receipts-next').addEventListener('click', () => {
+  state.receipts.month = nextMonth(state.receipts.month);
+  renderReceipts();
+});
+
+async function renderReceipts() {
+  const mk = state.receipts.month;
+  document.getElementById('receipts-month-label').textContent = monthKeyToLabel(mk);
+
+  const list = document.getElementById('receipts-list');
+  list.innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
+
+  const txns = await loadTransactions(mk);
+  list.innerHTML = '';
+
+  if (txns.length === 0) {
+    list.innerHTML = `<div class="empty-state">
+      <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="var(--on-surface-var)">
+        <path d="M20 4H4c-1.11 0-2 .89-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/>
+      </svg>
+      <p>No transactions this month</p>
+    </div>`;
+    return;
+  }
+
+  txns.forEach(t => {
+    const card = document.createElement('div');
+    card.className = 'txn-card';
+    card.innerHTML = `
+      <div class="txn-top">
+        <span class="txn-cat-name">${t.category_name}</span>
+        <span class="txn-badge ${t.is_positive ? 'badge-income' : 'badge-expense'}">${t.is_positive ? 'income' : 'expense'}</span>
+        <span class="txn-date">${epochDayToStr(t.epoch_day)}</span>
+        <span class="txn-amount ${t.amount >= 0 ? 'positive' : 'negative'}">${fmtMoney(Math.abs(t.amount))}</span>
+      </div>
+      ${t.description ? `<div class="txn-desc">${t.description}</div>` : ''}
+    `;
+    card.addEventListener('click', () => openEditModal(t));
+    list.appendChild(card);
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Edit transaction modal                                              */
+/* ------------------------------------------------------------------ */
+
+function openEditModal(txn) {
+  document.getElementById('edit-txn-uid').value = txn.uid;
+  document.getElementById('edit-txn-date').value = epochDayToDate(txn.epoch_day).toISOString().split('T')[0];
+  populateCategorySelect(document.getElementById('edit-txn-category'), txn.category_uid);
+  document.getElementById('edit-txn-amount').value = Math.abs(txn.amount).toFixed(2);
+  document.getElementById('edit-txn-description').value = txn.description || '';
+  openModal('modal-edit-txn');
+}
+
+document.getElementById('btn-edit-txn-cancel').addEventListener('click', () => closeModal('modal-edit-txn'));
+
+document.getElementById('btn-edit-txn-save').addEventListener('click', async () => {
+  const uid    = document.getElementById('edit-txn-uid').value;
+  const dateV  = document.getElementById('edit-txn-date').value;
+  const catUid = document.getElementById('edit-txn-category').value;
+  const amt    = parseFloat(document.getElementById('edit-txn-amount').value);
+  const desc   = document.getElementById('edit-txn-description').value.trim() || null;
+
+  if (!dateV || !catUid || isNaN(amt) || amt <= 0) {
+    showSnackbar('Please fill in all required fields');
+    return;
+  }
+
+  const cat = categories.find(c => c.uid === catUid);
+  const signedAmount = cat.is_positive ? Math.abs(amt) : -Math.abs(amt);
+
+  try {
+    await apiFetch(`/transactions/${uid}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        epoch_day: dateToEpochDay(dateV),
+        amount: signedAmount,
+        category_uid: catUid,
+        description: desc,
+      }),
+    });
+    closeModal('modal-edit-txn');
+    showSnackbar('Transaction updated');
+    renderReceipts();
+  } catch (e) {
+    showSnackbar('Error: ' + e.message);
+  }
+});
+
+document.getElementById('btn-delete-txn').addEventListener('click', async () => {
+  if (!confirm('Delete this transaction?')) return;
+  const uid = document.getElementById('edit-txn-uid').value;
+  try {
+    await apiFetch(`/transactions/${uid}`, { method: 'DELETE' });
+    closeModal('modal-edit-txn');
+    showSnackbar('Transaction deleted');
+    renderReceipts();
+  } catch (e) {
+    showSnackbar('Error: ' + e.message);
+  }
+});
+
+/* ========================================================================= */
+/* PREFERENCES pane                                                           */
+/* ========================================================================= */
+
+function updatePrefDisplay() {
+  document.getElementById('pref-url-display').textContent = apiBase || 'not set';
+}
+
+document.getElementById('btn-prefs').addEventListener('click', () => switchTab('prefs'));
+
+document.getElementById('btn-change-url').addEventListener('click', () => {
+  document.getElementById('url-input').value = apiBase;
+  openModal('modal-url');
+});
+
+document.getElementById('btn-url-cancel').addEventListener('click', () => closeModal('modal-url'));
+
+document.getElementById('btn-url-save').addEventListener('click', () => {
+  const val = document.getElementById('url-input').value.trim().replace(/\/$/, '');
+  localStorage.setItem(LS_URL_KEY, val);
+  apiBase = val;
+  updatePrefDisplay();
+  closeModal('modal-url');
+  boot();
+});
+
+/* Export */
+document.getElementById('btn-export').addEventListener('click', async () => {
+  try {
+    const [cats, txns, budget] = await Promise.all([
+      apiFetch('/categories'),
+      apiFetch('/transactions'),
+      apiFetch('/budget-items'),
+    ]);
+    const payload = { categories: cats, transactions: txns, budget_items: budget };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'budget-export.json';
+    a.click();
+  } catch (e) {
+    showSnackbar('Export failed: ' + e.message);
+  }
+});
+
+/* Import */
+document.getElementById('btn-import-open').addEventListener('click', () => {
+  document.getElementById('import-json').value = '';
+  openModal('modal-import');
+});
+document.getElementById('btn-import-cancel').addEventListener('click', () => closeModal('modal-import'));
+
+document.getElementById('btn-import-save').addEventListener('click', async () => {
+  let data;
+  try {
+    data = JSON.parse(document.getElementById('import-json').value);
+  } catch {
+    showSnackbar('Invalid JSON');
+    return;
+  }
+  const txns = Array.isArray(data) ? data : (data.transactions || []);
+  let ok = 0, fail = 0;
+  for (const t of txns) {
+    try {
+      await apiFetch('/transactions', { method: 'POST', body: JSON.stringify(t) });
+      ok++;
+    } catch { fail++; }
+  }
+  closeModal('modal-import');
+  showSnackbar(`Imported ${ok} transaction(s)${fail ? `, ${fail} failed` : ''}`);
+});
+
+/* ========================================================================= */
+/* Tab switching                                                              */
+/* ========================================================================= */
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.pane === name));
+  document.querySelectorAll('.pane').forEach(p => p.classList.toggle('active', p.id === 'pane-' + name));
+
+  if (name === 'summary')  renderSummary();
+  if (name === 'budget')   renderBudget();
+  if (name === 'receipts') renderReceipts();
+}
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.dataset.pane));
+});
+
+/* Close modals on overlay click */
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) overlay.classList.remove('open');
+  });
+});
+
+/* ========================================================================= */
+/* Boot                                                                       */
+/* ========================================================================= */
+
+async function boot() {
+  updatePrefDisplay();
+
+  if (!apiBase) {
+    // Prompt user to set the API URL
+    document.getElementById('url-input').value = '';
+    openModal('modal-url');
+    return;
+  }
+
+  try {
+    await loadCategories();
+    initEntryPane();
+  } catch (e) {
+    showSnackbar('Could not connect to API. Check Preferences.', 5000);
+  }
+}
+
+boot();
+</script>
+</body>
+</html>
