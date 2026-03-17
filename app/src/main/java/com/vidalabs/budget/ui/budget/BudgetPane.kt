@@ -33,7 +33,6 @@ import androidx.compose.ui.text.withStyle
 import com.vidalabs.budget.ui.components.MonthYearPickerDialogWheel
 import com.vidalabs.budget.ui.components.formatMonthYear
 import com.vidalabs.budget.ui.BudgetViewModel
-import java.time.YearMonth
 import kotlin.math.abs
 import java.util.Locale
 
@@ -45,7 +44,7 @@ fun BudgetPane(vm: BudgetViewModel, modifier: Modifier = Modifier) {
     var showMonthPicker by remember { mutableStateOf(false) }
     if (showMonthPicker) {
         MonthYearPickerDialogWheel(
-            initial = YearMonth.now(),
+            initial = ym,
             onDismiss = { showMonthPicker = false },
             onConfirm = { chosen ->
                 vm.setSelectedMonth(chosen)
