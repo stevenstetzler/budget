@@ -8,12 +8,13 @@ import java.time.format.DateTimeFormatter
 
 class SyncEngine(
     private val syncDao: SyncDao,
-    private val store: SafEventStore,
+    private val store: SafEventStore? = null,
     private val deviceId: String,
     private val nextSeq: suspend () -> Long, // local counter
     private val nowMs: () -> Long = { System.currentTimeMillis() }
 ) {
     suspend fun pull() {
+        val store = store ?: return
         val files = store.listEventFiles()
         for (f in files) {
             val json = store.readText(f)
@@ -30,7 +31,19 @@ class SyncEngine(
         val ym = monthDirFromTs(event.ts)       // folder partition by event time
         val filename = filenameFor(event)
         val json = SyncJson.encodeToString(event)
-        store.writeEventFile(ym, filename, json)
+        store?.writeEventFile(ym, filename, json)
+    }
+
+    /**
+     * Apply a list of events received from an external source (e.g. HTTP endpoint).
+     * Skips events that have already been applied.
+     */
+    suspend fun applyEvents(events: List<SyncEvent>) {
+        for (ev in events) {
+            if (syncDao.hasEvent(ev.eventId) > 0) continue
+            applyEvent(ev)
+            syncDao.markApplied(AppliedEventEntity(ev.eventId, ev.ts))
+        }
     }
 
     private suspend fun applyEvent(ev: SyncEvent) {

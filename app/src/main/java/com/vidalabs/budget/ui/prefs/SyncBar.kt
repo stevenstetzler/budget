@@ -6,6 +6,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -30,10 +31,10 @@ fun SyncBar(
 
     var folderUri by remember { mutableStateOf(prefs.getFolderUri()) }
     var status by remember { mutableStateOf(sync.readStatus()) }
+    var endpointInput by remember { mutableStateOf(prefs.getEndpointUrl().orEmpty()) }
 
     // ✅ queued comes from SyncDao Flow<Int>
     val queuedCount by sync.dao.observeOutboxCount().collectAsState(initial = 0)
-    // If your SyncManager exposes it differently, e.g. sync.observeOutboxCount(), use that instead.
 
     val scope = rememberCoroutineScope()
 
@@ -50,6 +51,7 @@ fun SyncBar(
     }
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // Folder sync row
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { picker.launch(null) }) {
                 Text(if (folderUri == null) "Select sync folder" else "Change sync folder")
@@ -65,6 +67,34 @@ fun SyncBar(
                     }
                 }
             ) { Text("Sync now") }
+        }
+
+        // Endpoint sync row
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = endpointInput,
+                onValueChange = { endpointInput = it },
+                modifier = Modifier.weight(1f),
+                label = { Text("Sync endpoint URL") },
+                placeholder = { Text("https://my.website.com/budget") },
+                singleLine = true
+            )
+
+            Button(
+                enabled = endpointInput.isNotBlank(),
+                onClick = {
+                    val url = endpointInput.trim()
+                    prefs.setEndpointUrl(url)
+                    scope.launch(Dispatchers.IO) {
+                        runCatching { sync.syncWithEndpoint() }
+                        val newStatus = sync.readStatus()
+                        withContext(Dispatchers.Main) { status = newStatus }
+                    }
+                }
+            ) { Text("Sync") }
         }
 
         SyncStatusLine(status = status, queuedCount = queuedCount)
@@ -83,6 +113,7 @@ private fun SyncStatusLine(status: SyncStatus, queuedCount: Int) {
             text = buildString {
                 append("Folder: ")
                 append(if (status.folderSet) "Set" else "Not set")
+                if (status.endpointUrl != null) append(" • Endpoint: ${status.endpointUrl}")
                 append(" • Queued: $queuedCount")
                 append(" • Last push: ${ts(status.lastPushMs)}")
                 append(" • Last pull: ${ts(status.lastPullMs)}")

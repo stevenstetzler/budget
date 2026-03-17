@@ -45,7 +45,7 @@ class SyncManager(
 
             val store = storeOrNull()
             if (store == null) {
-                // Folder not set: queue
+                // Folder not set: queue for later sync (via folder or endpoint)
                 db.syncDao().enqueueOutbox(
                     OutboxEventEntity(
                         eventId = eventId,
@@ -55,7 +55,12 @@ class SyncManager(
                         ts = ts
                     )
                 )
-                statusPrefs.setLastError("Sync folder not set (queued)")
+                val msg = if (prefs.getEndpointUrl() != null) {
+                    "Sync folder not set (queued for endpoint sync)"
+                } else {
+                    "Sync folder not set (queued)"
+                }
+                statusPrefs.setLastError(msg)
                 return@withContext
             }
 
@@ -128,11 +133,55 @@ class SyncManager(
         statusPrefs.setLastSyncMs(System.currentTimeMillis())
     }
 
+    /**
+     * Sync with a configured HTTP endpoint:
+     *  1. POST outbox events to the endpoint.
+     *  2. GET all events from the endpoint and apply any new ones locally.
+     */
+    suspend fun syncWithEndpoint() = withContext(Dispatchers.IO) {
+        val endpointUrl = prefs.getEndpointUrl() ?: return@withContext
+        val client = HttpSyncClient()
+
+        // Push outbox events to endpoint
+        val outboxItems = dao.listOutbox()
+        if (outboxItems.isNotEmpty()) {
+            try {
+                val events = outboxItems.map { SyncJson.decodeFromString<SyncEvent>(it.json) }
+                client.postEvents(endpointUrl, events)
+                for (item in outboxItems) {
+                    dao.deleteOutboxById(item.id)
+                }
+                statusPrefs.setLastPushMs(System.currentTimeMillis())
+            } catch (t: Throwable) {
+                statusPrefs.setLastError("Endpoint push failed: ${t.message ?: t::class.simpleName}")
+                statusPrefs.setLastSyncMs(System.currentTimeMillis())
+                return@withContext
+            }
+        }
+
+        // Pull events from endpoint and apply locally
+        try {
+            val remoteEvents = client.getEvents(endpointUrl)
+            SyncEngine(
+                syncDao = db.syncDao(),
+                deviceId = deviceId,
+                nextSeq = { nextSeq() }
+            ).applyEvents(remoteEvents)
+            statusPrefs.setLastPullMs(System.currentTimeMillis())
+            statusPrefs.setLastError(null)
+        } catch (t: Throwable) {
+            statusPrefs.setLastError("Endpoint pull failed: ${t.message ?: t::class.simpleName}")
+        }
+
+        statusPrefs.setLastSyncMs(System.currentTimeMillis())
+    }
+
     fun readStatus(): SyncStatus {
         val dao = db.syncDao()
         // can't call suspend here; so omit outbox count in this function, or compute in UI via a Flow.
         return SyncStatus(
             folderSet = prefs.getFolderUri() != null,
+            endpointUrl = prefs.getEndpointUrl(),
             lastPushMs = statusPrefs.getLastPushMs(),
             lastPullMs = statusPrefs.getLastPullMs(),
             lastSyncMs = statusPrefs.getLastSyncMs(),
@@ -143,6 +192,7 @@ class SyncManager(
 
 data class SyncStatus(
     val folderSet: Boolean,
+    val endpointUrl: String?,
     val lastPushMs: Long,
     val lastPullMs: Long,
     val lastSyncMs: Long,
