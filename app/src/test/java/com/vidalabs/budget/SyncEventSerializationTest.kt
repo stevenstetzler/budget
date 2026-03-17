@@ -29,7 +29,7 @@ class SyncEventSerializationTest {
             deleted = false
         )
 
-        val json = SyncJson.encodeToString(event)
+        val json = SyncJson.encodeToString<SyncEvent>(event)
         val decoded = SyncJson.decodeFromString<SyncEvent>(json)
 
         assertTrue(decoded is SyncEvent.UpsertCategory)
@@ -61,7 +61,7 @@ class SyncEventSerializationTest {
             deleted = true
         )
 
-        val decoded = SyncJson.decodeFromString<SyncEvent>(SyncJson.encodeToString(event))
+        val decoded = SyncJson.decodeFromString<SyncEvent>(SyncJson.encodeToString<SyncEvent>(event))
                 as SyncEvent.UpsertCategory
         assertTrue(decoded.deleted)
     }
@@ -86,7 +86,7 @@ class SyncEventSerializationTest {
             deleted = false
         )
 
-        val json = SyncJson.encodeToString(event)
+        val json = SyncJson.encodeToString<SyncEvent>(event)
         val decoded = SyncJson.decodeFromString<SyncEvent>(json) as SyncEvent.UpsertReceipt
 
         assertEquals(event.uid, decoded.uid)
@@ -115,7 +115,7 @@ class SyncEventSerializationTest {
             deleted = false
         )
 
-        val decoded = SyncJson.decodeFromString<SyncEvent>(SyncJson.encodeToString(event))
+        val decoded = SyncJson.decodeFromString<SyncEvent>(SyncJson.encodeToString<SyncEvent>(event))
                 as SyncEvent.UpsertReceipt
         assertNull(decoded.description)
     }
@@ -138,7 +138,7 @@ class SyncEventSerializationTest {
             deleted = false
         )
 
-        val json = SyncJson.encodeToString(event)
+        val json = SyncJson.encodeToString<SyncEvent>(event)
         val decoded = SyncJson.decodeFromString<SyncEvent>(json) as SyncEvent.UpsertBudgetItem
 
         assertEquals(event.categoryUid, decoded.categoryUid)
@@ -168,8 +168,8 @@ class SyncEventSerializationTest {
             categoryUid = "c", monthKey = 202601, value = 100.0, updatedAt = 1L
         )
 
-        assertTrue(SyncJson.encodeToString(category).contains("\"type\":\"UpsertCategory\""))
-        assertTrue(SyncJson.encodeToString(receipt).contains("\"type\":\"UpsertReceipt\""))
-        assertTrue(SyncJson.encodeToString(budget).contains("\"type\":\"UpsertBudgetItem\""))
+        assertTrue(SyncJson.encodeToString<SyncEvent>(category).contains("\"type\":\"UpsertCategory\""))
+        assertTrue(SyncJson.encodeToString<SyncEvent>(receipt).contains("\"type\":\"UpsertReceipt\""))
+        assertTrue(SyncJson.encodeToString<SyncEvent>(budget).contains("\"type\":\"UpsertBudgetItem\""))
     }
 }
