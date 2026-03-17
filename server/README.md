@@ -21,6 +21,13 @@ python app.py
 
 The server starts on **http://localhost:5000** by default.
 All API routes are prefixed with `/budget/api/`.
+The web frontend is served at `http://localhost:5000/budget/`.
+
+To enable Flask debug/reload mode (development only):
+
+```bash
+FLASK_DEBUG=1 python app.py
+```
 
 ## API Reference
 
