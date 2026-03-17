@@ -33,19 +33,24 @@ interface BudgetDao {
         c.uid AS categoryUid,
         c.name AS name,
         c.isPositive AS isPositive,
-        COALESCE(cur.value, prev.value, 0) AS value
+        COALESCE(cur.value, (
+            SELECT b.value
+            FROM budgetitems b
+            WHERE b.categoryUid = c.uid
+              AND b.deleted = 0
+              AND b.monthKey < :monthKey
+            ORDER BY b.monthKey DESC
+            LIMIT 1
+        ), 0) AS value
     FROM categories c
     LEFT JOIN budgetitems cur
         ON cur.categoryUid = c.uid AND cur.monthKey = :monthKey AND cur.deleted = 0
-    LEFT JOIN budgetitems prev
-        ON prev.categoryUid = c.uid AND prev.monthKey = :prevMonthKey AND prev.deleted = 0
     WHERE c.deleted = 0
     ORDER BY c.isPositive DESC, c.name COLLATE NOCASE ASC
     """
     )
     fun observeBudgetRowsForMonth(
-        monthKey: Int,
-        prevMonthKey: Int
+        monthKey: Int
     ): Flow<List<BudgetRow>>
 
 

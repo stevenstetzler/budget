@@ -181,8 +181,7 @@ class BudgetViewModel(
         selectedMonth
             .flatMapLatest { ym ->
                 val monthKey = ym.toMonthKey()
-                val prevMonthKey = ym.minusMonths(1).toMonthKey()
-                repo.observeBudgetRowsForMonth(monthKey, prevMonthKey)
+                repo.observeBudgetRowsForMonth(monthKey)
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
