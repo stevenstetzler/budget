@@ -139,9 +139,12 @@ class BudgetViewModel(
             )
 
 
-    val categories: StateFlow<List<CategoryEntity>> =
-        repo.observeCategories()
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val categories: StateFlow<List<CategoryEntity>> = flow {
+        val today = LocalDate.now()
+        val startEpochDay = today.minusDays(30).toEpochDay()
+        val endEpochDay = today.plusDays(1).toEpochDay()
+        emitAll(repo.observeCategoriesByRecentUsage(startEpochDay, endEpochDay))
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val summary: StateFlow<SummaryTotals> =
         repo.observeSummaryTotals()
