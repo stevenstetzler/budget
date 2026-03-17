@@ -1413,12 +1413,21 @@ document.getElementById('btn-import-save').addEventListener('click', async () =>
     return;
   }
   const txns = Array.isArray(data) ? data : (data.transactions || []);
+  console.log(txns);
   let ok = 0, fail = 0;
   for (const t of txns) {
     try {
-      await apiFetch('/transactions', { method: 'POST', body: JSON.stringify(t) });
+      // We await the call directly so the catch can grab any immediate failures
+      const response = await apiFetch('/transactions', { 
+        method: 'POST', 
+        body: JSON.stringify(t) 
+      });
       ok++;
-    } catch { fail++; }
+    } catch (err) { 
+      // 'err' captures the exception thrown by the failed promise
+      fail++; 
+      console.error("Transaction failed:", err); 
+    }
   }
   closeModal('modal-import');
   showSnackbar(`Imported ${ok} transaction(s)${fail ? `, ${fail} failed` : ''}`);
@@ -1485,13 +1494,21 @@ document.getElementById('btn-import-csv-save').addEventListener('click', async (
   }
 
   const headers = parseCsvLine(lines[0]).map(h => h.trim().toLowerCase());
-  const cats = await apiFetch('/categories').catch(() => []);
+
+  // Optional: Log if the initial categories fetch fails
+  const cats = await apiFetch('/categories').catch((err) => {
+    console.error("Failed to fetch categories:", err);
+    return [];
+  });
+
   const catNameMap = {};
   cats.forEach(c => { catNameMap[c.name.toLowerCase()] = c.uid; });
 
   let ok = 0, fail = 0;
   for (let i = 1; i < lines.length; i++) {
     const cols = parseCsvLine(lines[i]);
+    if (!cols || cols.length === 0) continue; // Skip empty lines
+
     const row = {};
     headers.forEach((h, idx) => { row[h] = (cols[idx] || '').trim(); });
 
@@ -1501,21 +1518,34 @@ document.getElementById('btn-import-csv-save').addEventListener('click', async (
     } else if (row.date) {
       epoch_day = Math.floor(new Date(row.date + 'T00:00:00Z').getTime() / 86400000);
     }
+    
     const amount = parseFloat(row.amount);
     let category_uid = row.category_uid || '';
     if (!category_uid && row.category) {
       category_uid = catNameMap[row.category.toLowerCase()] || '';
     }
 
-    if (epoch_day === undefined || epoch_day === null || isNaN(epoch_day) || isNaN(amount) || !category_uid) { fail++; continue; }
+    // Log validation failures so you know WHY rows are being skipped
+    if (isNaN(epoch_day) || isNaN(amount) || !category_uid) { 
+      console.warn(`Row ${i} skipped: Invalid data`, { epoch_day, amount, category_uid });
+      fail++; 
+      continue; 
+    }
 
     const txn = { epoch_day, amount, category_uid };
     if (row.description) txn.description = row.description;
+
     try {
       await apiFetch('/transactions', { method: 'POST', body: JSON.stringify(txn) });
       ok++;
-    } catch { fail++; }
+    } catch (err) { 
+      fail++; 
+      // This will now print the actual error object to your console
+      console.error(`Error uploading row ${i}:`, err);
+    }
   }
+
+  console.log(`Finished: ${ok} success, ${fail} failures.`);
   closeModal('modal-import-csv');
   showSnackbar(`Imported ${ok} transaction(s)${fail ? `, ${fail} failed` : ''}`);
 });
