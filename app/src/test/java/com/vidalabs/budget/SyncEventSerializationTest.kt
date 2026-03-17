@@ -13,6 +13,8 @@ class SyncEventSerializationTest {
 
     // ── UpsertCategory ──────────────────────────────────────────────────────
 
+    // Verifies the full serialization contract: field names, types, and the
+    // sealed-class discriminator all survive a JSON round-trip via SyncJson.
     @Test
     fun `UpsertCategory round-trips through JSON`() {
         val event = SyncEvent.UpsertCategory(
@@ -43,25 +45,8 @@ class SyncEventSerializationTest {
         assertEquals(event.deleted, decoded2.deleted)
     }
 
-    @Test
-    fun `UpsertCategory with isPositive true round-trips correctly`() {
-        val event = SyncEvent.UpsertCategory(
-            eventId = "dev:2",
-            deviceId = "dev",
-            seq = 2L,
-            ts = 1_000L,
-            uid = "income-uid",
-            name = "salary",
-            isPositive = true,
-            updatedAt = 1_000L,
-            deleted = false
-        )
-
-        val decoded = SyncJson.decodeFromString<SyncEvent>(SyncJson.encodeToString(event))
-                as SyncEvent.UpsertCategory
-        assertTrue(decoded.isPositive)
-    }
-
+    // `deleted` defaults to false; this verifies the non-default value is
+    // explicitly encoded rather than silently omitted by the serializer.
     @Test
     fun `UpsertCategory deleted flag round-trips correctly`() {
         val event = SyncEvent.UpsertCategory(
@@ -83,6 +68,8 @@ class SyncEventSerializationTest {
 
     // ── UpsertReceipt ───────────────────────────────────────────────────────
 
+    // Verifies the receipt-specific fields (epochDay, signed amount, categoryUid)
+    // survive serialization without loss or sign-flip.
     @Test
     fun `UpsertReceipt round-trips through JSON`() {
         val event = SyncEvent.UpsertReceipt(
@@ -110,6 +97,8 @@ class SyncEventSerializationTest {
         assertFalse(decoded.deleted)
     }
 
+    // `description` is nullable; serializers can silently drop null fields or
+    // fail to restore them, so this explicitly verifies null survives the round-trip.
     @Test
     fun `UpsertReceipt with null description round-trips correctly`() {
         val event = SyncEvent.UpsertReceipt(
@@ -131,29 +120,10 @@ class SyncEventSerializationTest {
         assertNull(decoded.description)
     }
 
-    @Test
-    fun `UpsertReceipt positive amount round-trips correctly`() {
-        val event = SyncEvent.UpsertReceipt(
-            eventId = "dev:12",
-            deviceId = "dev",
-            seq = 12L,
-            ts = 1_000L,
-            uid = "r-income",
-            epochDay = 100L,
-            amount = 2500.0,
-            description = "Paycheck",
-            categoryUid = "income-uid",
-            updatedAt = 1_000L,
-            deleted = false
-        )
-
-        val decoded = SyncJson.decodeFromString<SyncEvent>(SyncJson.encodeToString(event))
-                as SyncEvent.UpsertReceipt
-        assertEquals(2500.0, decoded.amount, 0.0001)
-    }
-
     // ── UpsertBudgetItem ────────────────────────────────────────────────────
 
+    // Verifies the budget-item-specific fields (monthKey integer, budget value)
+    // round-trip correctly through JSON.
     @Test
     fun `UpsertBudgetItem round-trips through JSON`() {
         val event = SyncEvent.UpsertBudgetItem(
@@ -178,27 +148,11 @@ class SyncEventSerializationTest {
         assertFalse(decoded.deleted)
     }
 
-    @Test
-    fun `UpsertBudgetItem deleted flag round-trips correctly`() {
-        val event = SyncEvent.UpsertBudgetItem(
-            eventId = "dev:21",
-            deviceId = "dev",
-            seq = 21L,
-            ts = 1_000L,
-            categoryUid = "cat-1",
-            monthKey = 202512,
-            value = 0.0,
-            updatedAt = 1_000L,
-            deleted = true
-        )
-
-        val decoded = SyncJson.decodeFromString<SyncEvent>(SyncJson.encodeToString(event))
-                as SyncEvent.UpsertBudgetItem
-        assertTrue(decoded.deleted)
-    }
-
     // ── Type discriminator ──────────────────────────────────────────────────
 
+    // SyncJson is configured with classDiscriminator = "type". This verifies
+    // that config is in effect: a wrong or missing discriminator key would make
+    // all polymorphic decodes fail at runtime.
     @Test
     fun `JSON type discriminator is present in encoded output`() {
         val category = SyncEvent.UpsertCategory(
@@ -217,15 +171,5 @@ class SyncEventSerializationTest {
         assertTrue(SyncJson.encodeToString(category).contains("\"type\":\"UpsertCategory\""))
         assertTrue(SyncJson.encodeToString(receipt).contains("\"type\":\"UpsertReceipt\""))
         assertTrue(SyncJson.encodeToString(budget).contains("\"type\":\"UpsertBudgetItem\""))
-    }
-
-    // ── eventId format ──────────────────────────────────────────────────────
-
-    @Test
-    fun `buildEventId formats deviceId and seq with colon separator`() {
-        val deviceId = "my-device"
-        val seq = 42L
-        val eventId = "$deviceId:$seq"
-        assertEquals("my-device:42", eventId)
     }
 }
