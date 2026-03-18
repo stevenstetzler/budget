@@ -68,12 +68,12 @@ def export_to_excel(input_file_path, output_file_path="budget_export.xlsx"):
         # First sheet: placeholder (parse_receipts.py skips the first sheet)
         pd.DataFrame().to_excel(writer, sheet_name="Summary", index=False)
 
-        # One sheet per month, ordered chronologically
+        # One sheet per month, ordered chronologically in descending order
         month_groups = (
             df.groupby(["_year", "_month"], sort=True)
         )
 
-        for (year, month), group in month_groups:
+        for (year, month), group in sorted(month_groups, key=lambda x: (x[0][0], x[0][1]), reverse=True):
             sheet_name = f"{month} {year} Receipts"
 
             # Determine the unique categories for this month (preserve insertion order)
