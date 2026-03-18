@@ -60,8 +60,37 @@ SAMPLE_ROWS = [
 ]
 
 
+SAMPLE_ROWS_ISO_DATES = [
+    {
+        "date": "2026-03-16",
+        "category": "car",
+        "description": "brakes",
+        "amount": 87.3,
+        "isPositive": False,
+    },
+    {
+        "date": "2026-03-01",
+        "category": "car",
+        "description": "gas",
+        "amount": 57.76,
+        "isPositive": False,
+    },
+    {
+        "date": "2026-03-01",
+        "category": "rent",
+        "description": "Rent",
+        "amount": 1900.0,
+        "isPositive": False,
+    },
+]
+
+
 def _make_input_df():
     return pd.DataFrame(SAMPLE_ROWS)
+
+
+def _make_iso_date_df():
+    return pd.DataFrame(SAMPLE_ROWS_ISO_DATES)
 
 
 # ---------------------------------------------------------------------------
@@ -116,6 +145,33 @@ def test_round_trip_json():
     assert list(result["description"]) == list(original["description"])
     assert list(result["amount"]) == pytest.approx(list(original["amount"]))
     assert list(result["isPositive"]) == list(original["isPositive"])
+
+
+# ---------------------------------------------------------------------------
+# Round-trip with ISO-format dates (YYYY-MM-DD)
+# ---------------------------------------------------------------------------
+
+
+def test_round_trip_iso_dates():
+    """CSV with YYYY-MM-DD dates -> export_to_excel -> parse_receipts works correctly."""
+    original = _make_iso_date_df()
+    # parse_receipts always outputs dates as "M/1/YYYY" from the sheet name
+    expected_dates = ["3/1/2026", "3/1/2026", "3/1/2026"]
+
+    with tempfile.TemporaryDirectory() as tmp:
+        csv_path = os.path.join(tmp, "input.csv")
+        xlsx_path = os.path.join(tmp, "output.xlsx")
+
+        original.to_csv(csv_path, index=False)
+        export_to_excel(csv_path, xlsx_path)
+        result = parse_receipts(xlsx_path)
+
+    result = result.reset_index(drop=True)
+
+    assert list(result["date"]) == expected_dates
+    assert list(result["category"]) == list(original["category"])
+    assert list(result["description"]) == list(original["description"])
+    assert list(result["amount"]) == pytest.approx(list(original["amount"]))
 
 
 # ---------------------------------------------------------------------------

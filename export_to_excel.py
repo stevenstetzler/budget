@@ -11,8 +11,9 @@ def export_to_excel(input_file_path, output_file_path="budget_export.xlsx"):
 
     Input columns expected: date, category, description, amount, isPositive
 
-    The date column should use the format produced by parse_receipts.py:
-    "M/D/YYYY" (e.g. "3/1/2026").
+    The date column may use any format pandas can parse, including
+    "M/D/YYYY" (e.g. "3/1/2026"), "YYYY-MM-DD" (e.g. "2026-03-01"),
+    or datetime/Timestamp objects that pandas produces when reading JSON.
 
     Output Excel structure:
     - Sheet 1: "Summary" (placeholder; parse_receipts.py skips the first sheet)
@@ -47,17 +48,19 @@ def export_to_excel(input_file_path, output_file_path="budget_export.xlsx"):
         raise ValueError(f"Input file is missing required columns: {missing}")
 
     # Parse (month, year) from dates.
-    # Accepts "M/D/YYYY" strings (CSV output of parse_receipts.py) as well as
-    # datetime/Timestamp objects that pandas may create when reading JSON.
+    # Accepts datetime/Timestamp objects as well as any date string that
+    # pandas can parse (e.g. "M/D/YYYY", "YYYY-MM-DD", "MM-DD-YYYY", …).
     def _extract_month_year(date_val):
         if hasattr(date_val, "month") and hasattr(date_val, "year"):
             return int(date_val.month), int(date_val.year)
-        parts = str(date_val).split("/")
-        if len(parts) < 3:
+        try:
+            ts = pd.to_datetime(str(date_val))
+            return ts.month, ts.year
+        except Exception:
             raise ValueError(
-                f"Unrecognized date format '{date_val}'. Expected 'M/D/YYYY'."
+                f"Unrecognized date format '{date_val}'. "
+                "Supported formats include 'M/D/YYYY' and 'YYYY-MM-DD'."
             )
-        return int(parts[0]), int(parts[2])
 
     df["_month"], df["_year"] = zip(*df["date"].apply(_extract_month_year))
 
