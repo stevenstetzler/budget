@@ -9,7 +9,7 @@ def export_to_excel(input_file_path, output_file_path="budget_export.xlsx"):
     Convert a CSV or JSON file (as produced by parse_receipts.py) back into
     the legacy Excel spreadsheet format.
 
-    Input columns expected: date, category, description, amount, isPositive
+    Input columns expected: date, category, description, amount
 
     The date column may use any format pandas can parse, including
     "M/D/YYYY" (e.g. "3/1/2026"), "YYYY-MM-DD" (e.g. "2026-03-01"),
@@ -68,12 +68,14 @@ def export_to_excel(input_file_path, output_file_path="budget_export.xlsx"):
         # First sheet: placeholder (parse_receipts.py skips the first sheet)
         pd.DataFrame().to_excel(writer, sheet_name="Summary", index=False)
 
-        # One sheet per month, ordered chronologically in descending order
+        # One sheet per month, ordered chronologically in ascending order
         month_groups = (
             df.groupby(["_year", "_month"], sort=True)
         )
 
-        for (year, month), group in sorted(month_groups, key=lambda x: (x[0][0], x[0][1]), reverse=True):
+        for (year, month), group in sorted(
+            month_groups, key=lambda x: (x[0][0], x[0][1])
+        ):
             sheet_name = f"{month} {year} Receipts"
 
             # Determine the unique categories for this month (preserve insertion order)
