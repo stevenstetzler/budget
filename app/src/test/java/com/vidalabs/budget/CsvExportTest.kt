@@ -1,34 +1,24 @@
 package com.vidalabs.budget
 
 import com.vidalabs.budget.data.TransactionRow
+import com.vidalabs.budget.ui.buildTransactionCsv
+import com.vidalabs.budget.ui.buildTransactionJson
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 import kotlin.math.abs
 
 /**
- * Tests that CSV export preserves the sign (+/-) of transaction amounts.
+ * Tests that CSV/JSON export preserves the sign (+/-) of transaction amounts.
  *
  * TransactionRow.amount is stored as a signed value in the database
- * (negative for expenses, positive for income). The exported CSV should
+ * (negative for expenses, positive for income). The exported CSV/JSON should
  * reflect this sign so that users can distinguish income from expenses
  * without relying solely on the isPositive boolean column.
  */
 class CsvExportTest {
-
-    private fun buildExportCsv(transactions: List<TransactionRow>): String {
-        val sb = StringBuilder()
-        sb.appendLine("date,category,amount,description,isPositive")
-        for (t in transactions) {
-            val date = LocalDate.ofEpochDay(t.epochDay).format(DateTimeFormatter.ISO_LOCAL_DATE)
-            val amount = t.amount  // signed, not abs()
-            val description = t.description ?: ""
-            sb.appendLine("$date,${t.categoryName},$amount,$description,${t.isPositive}")
-        }
-        return sb.toString()
-    }
 
     // Parses the amount field from a CSV data line.
     // All tests use descriptions without commas so a simple split is safe here.
@@ -50,7 +40,7 @@ class CsvExportTest {
             categoryName = "grocery",
             isPositive = false
         )
-        val csv = buildExportCsv(listOf(expense))
+        val csv = buildTransactionCsv(listOf(expense))
         val lines = csv.trim().lines()
         assertEquals(2, lines.size)  // header + 1 data row
         val exportedAmount = parseAmountFromCsvLine(lines[1])
@@ -70,7 +60,7 @@ class CsvExportTest {
             categoryName = "income",
             isPositive = true
         )
-        val csv = buildExportCsv(listOf(income))
+        val csv = buildTransactionCsv(listOf(income))
         val lines = csv.trim().lines()
         assertEquals(2, lines.size)
         val exportedAmount = parseAmountFromCsvLine(lines[1])
@@ -90,7 +80,7 @@ class CsvExportTest {
             categoryName = "restaurant",
             isPositive = false
         )
-        val csv = buildExportCsv(listOf(expense))
+        val csv = buildTransactionCsv(listOf(expense))
         val headerCols = csv.trim().lines()[0].split(",")
         assertTrue("CSV header must include isPositive column",
             headerCols.any { it.trim() == "isPositive" })
@@ -112,10 +102,44 @@ class CsvExportTest {
             categoryName = "grocery",
             isPositive = false
         )
-        val csv = buildExportCsv(listOf(expense))
+        val csv = buildTransactionCsv(listOf(expense))
         val exportedAmount = parseAmountFromCsvLine(csv.trim().lines()[1])
         // Import uses abs() on the amount before passing to importTransaction
         val importedAsPositive = abs(exportedAmount)
         assertEquals(originalMagnitude, importedAsPositive, 0.001)
+    }
+
+    // JSON export must also preserve the sign so that the amount field is
+    // informative without requiring callers to cross-reference isPositive.
+    @Test
+    fun `expense transaction JSON exports with negative amount`() {
+        val expense = TransactionRow(
+            uid = "uid5",
+            epochDay = epochDay2024,
+            amount = -42.5,
+            description = null,
+            categoryName = "grocery",
+            isPositive = false
+        )
+        val json = buildTransactionJson(listOf(expense))
+        // Verify the raw JSON string contains the signed amount
+        assertTrue("JSON export should contain negative amount", json.contains("-42.5"))
+        assertFalse("JSON export should not contain unsigned amount only", json.contains("\"amount\": 42.5"))
+    }
+
+    // JSON export of income must remain positive.
+    @Test
+    fun `income transaction JSON exports with positive amount`() {
+        val income = TransactionRow(
+            uid = "uid6",
+            epochDay = epochDay2024,
+            amount = 200.0,
+            description = null,
+            categoryName = "income",
+            isPositive = true
+        )
+        val json = buildTransactionJson(listOf(income))
+        assertTrue("JSON export should contain positive amount", json.contains("200.0"))
+        assertTrue("JSON export should reflect isPositive=true", json.contains("\"isPositive\": true"))
     }
 }
