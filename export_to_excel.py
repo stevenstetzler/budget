@@ -31,9 +31,9 @@ def _write_summary_sheet(ws, most_recent_month, most_recent_year):
     G1      "Budget"            (bold)
     H1      "Fraction"          (bold)
     E2      =$B$4-E4
-    F2      =ARRAY_CONSTRAIN(ARRAYFORMULA(INDIRECT(ADDRESS(ROW(),COLUMN()-1))/$B$4),1,1)
+    F2      =IFERROR(INDIRECT(ADDRESS(ROW(),COLUMN()-1))/$B$4,"")
     G2      =$B$4-G4
-    H2      =ARRAY_CONSTRAIN(ARRAYFORMULA(INDIRECT(ADDRESS(ROW(),COLUMN()-1))/$B$4),1,1)
+    H2      =IFERROR(INDIRECT(ADDRESS(ROW(),COLUMN()-1))/$B$4,"")
     A3:C3   "Income"            (merged, bold, centered)
     D3:H3   "Expenses"          (merged, bold, centered)
     A4      "Total"             (bold)
@@ -44,7 +44,7 @@ def _write_summary_sheet(ws, most_recent_month, most_recent_year):
     G4      =SUM(G6:G102)
     H4      =G4/$B$4
     A5-H5   column headers      (all bold)
-    A6:H105 per-row formulas referencing the selected receipts sheet
+    A6:H105 per-row IFERROR/INDIRECT formulas referencing the selected receipts sheet
     """
     bold = Font(bold=True)
     center = Alignment(horizontal="center", vertical="center")
@@ -77,13 +77,11 @@ def _write_summary_sheet(ws, most_recent_month, most_recent_year):
     # Row 2 — cash flow formulas
     ws.cell(row=2, column=5).value = "=$B$4-E4"
     ws.cell(row=2, column=6).value = (
-        "=ARRAY_CONSTRAIN(ARRAYFORMULA("
-        "INDIRECT(ADDRESS(ROW(),COLUMN()-1))/$B$4), 1, 1)"
+        '=IFERROR(INDIRECT(ADDRESS(ROW(),COLUMN()-1))/$B$4,"")'
     )
     ws.cell(row=2, column=7).value = "=$B$4-G4"
     ws.cell(row=2, column=8).value = (
-        "=ARRAY_CONSTRAIN(ARRAYFORMULA("
-        "INDIRECT(ADDRESS(ROW(),COLUMN()-1))/$B$4), 1, 1)"
+        '=IFERROR(INDIRECT(ADDRESS(ROW(),COLUMN()-1))/$B$4,"")'
     )
 
     # --- Row 3 — section labels ---
@@ -124,26 +122,21 @@ def _write_summary_sheet(ws, most_recent_month, most_recent_year):
     )
     for row in range(6, 106):
         ws.cell(row=row, column=1).value = (
-            f"=ARRAY_CONSTRAIN(ARRAYFORMULA(INDIRECT({_ref}"
-            f"&ADDRESS(ROW(),1))), 1, 1)"
+            f'=IFERROR(INDIRECT({_ref}&ADDRESS(ROW(),1)),"")'
         )
         ws.cell(row=row, column=2).value = (
-            f"=ARRAY_CONSTRAIN(ARRAYFORMULA(INDIRECT({_ref}"
-            f"&ADDRESS(ROW(),2))), 1, 1)"
+            f'=IFERROR(INDIRECT({_ref}&ADDRESS(ROW(),2)),"")'
         )
         ws.cell(row=row, column=3).value = f"=B{row}/$B$4"
         ws.cell(row=row, column=4).value = (
-            f"=ARRAY_CONSTRAIN(ARRAYFORMULA(INDIRECT({_ref}"
-            f"&ADDRESS(1, (ROW()-ROW($D$6))*2+1+2))), 1, 1)"
+            f'=IFERROR(INDIRECT({_ref}&ADDRESS(1,(ROW()-ROW($D$6))*2+1+2)),"")'
         )
         ws.cell(row=row, column=5).value = (
-            f"=ARRAY_CONSTRAIN(ARRAYFORMULA(INDIRECT({_ref}"
-            f"&ADDRESS(2, (ROW()-ROW($D$6))*2+1+1+2))), 1, 1)"
+            f'=IFERROR(INDIRECT({_ref}&ADDRESS(2,(ROW()-ROW($D$6))*2+1+1+2)),"")'
         )
         ws.cell(row=row, column=6).value = f"=E{row}/$B$4"
         ws.cell(row=row, column=7).value = (
-            f"=ARRAY_CONSTRAIN(ARRAYFORMULA(INDIRECT({_ref}"
-            f"&ADDRESS(3, (ROW()-ROW($D$6))*2+1+1+2))), 1, 1)"
+            f'=IFERROR(INDIRECT({_ref}&ADDRESS(3,(ROW()-ROW($D$6))*2+1+1+2)),"")'
         )
         ws.cell(row=row, column=8).value = f"=G{row}/$B$4"
 
