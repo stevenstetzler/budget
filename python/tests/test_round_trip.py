@@ -254,7 +254,7 @@ def test_summary_sheet_layout():
 
     # Row 4: totals row
     assert ws.cell(row=4, column=1).value == "Total"
-    assert ws.cell(row=4, column=2).value == "=SUM(B6:B)"
+    assert ws.cell(row=4, column=2).value == "=SUM(B6:B1048576)"
     assert ws.cell(row=4, column=4).value == "Total"
     assert ws.cell(row=4, column=5).value == "=SUM(E6:E102)"
 
