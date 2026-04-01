@@ -4,7 +4,7 @@ import os
 
 import pandas as pd
 from openpyxl import Workbook
-from openpyxl.styles import Alignment, Font
+from openpyxl.styles import Alignment, Border, Font, Side
 from openpyxl.utils import get_column_letter
 
 # Number formats
@@ -15,6 +15,28 @@ PERCENT_FORMAT = "0%"
 # Expense category priority order (after "Income").  Categories not listed
 # here are appended in first-seen insertion order.
 PRIORITY_CATS = ["withholding", "taxes", "savings", "rent", "utilities", "car"]
+
+# Border style used throughout
+THIN = Side(style="thin")
+
+# Column width constants
+SUMMARY_COLUMN_WIDTHS = {
+    "A": 18, "B": 15, "C": 10,
+    "D": 18, "E": 15, "F": 10, "G": 15, "H": 10,
+}
+RECEIPTS_DESC_COL_WIDTH = 25
+RECEIPTS_AMT_COL_WIDTH = 15
+
+
+def _update_cell_border(cell, left=None, right=None, top=None, bottom=None):
+    """Update specific sides of a cell's border, preserving all other sides."""
+    b = cell.border
+    cell.border = Border(
+        left=left if left is not None else b.left,
+        right=right if right is not None else b.right,
+        top=top if top is not None else b.top,
+        bottom=bottom if bottom is not None else b.bottom,
+    )
 
 
 def _to_bool(val):
@@ -53,7 +75,8 @@ def _write_summary_sheet(ws, most_recent_month, most_recent_year):
     G4      =SUM(G6:G102)
     H4      =G4/$B$4
     A5-H5   column headers      (all bold)
-    A6:H105 per-row IFERROR/INDIRECT formulas referencing the selected receipts sheet
+    A6:H105 per-row IFERROR/ISBLANK/INDIRECT formulas referencing the selected
+            receipts sheet; ISBLANK prevents empty cells from showing 0
     """
     bold = Font(bold=True)
     center = Alignment(horizontal="center", vertical="center")
@@ -139,34 +162,56 @@ def _write_summary_sheet(ws, most_recent_month, most_recent_year):
     # --- Rows 6–105 — per-row formulas ---
     # Income (cols A–C): individual income transactions from the receipts sheet
     # Expenses (cols D–H): one row per expense category (name, total, %, budget, %)
+    # ISBLANK is used so that empty cells in the receipts sheet show "" not 0.
     _ref = (
         "\"'\"&MONTH($B$1)&\" \"&YEAR($B$1)&\" Receipts'!\""
     )
     for row in range(6, 106):
         ws.cell(row=row, column=1).value = (
-            f'=IFERROR(INDIRECT({_ref}&ADDRESS(ROW(),1)),"")'
+            f'=IFERROR(IF(ISBLANK(INDIRECT({_ref}&ADDRESS(ROW(),1))),"",INDIRECT({_ref}&ADDRESS(ROW(),1))),"")'
         )
         ws.cell(row=row, column=2).value = (
-            f'=IFERROR(INDIRECT({_ref}&ADDRESS(ROW(),2)),"")'
+            f'=IFERROR(IF(ISBLANK(INDIRECT({_ref}&ADDRESS(ROW(),2))),"",INDIRECT({_ref}&ADDRESS(ROW(),2))),"")'
         )
         ws.cell(row=row, column=2).number_format = ACCOUNTING_FORMAT
-        ws.cell(row=row, column=3).value = f"=B{row}/$B$4"
+        ws.cell(row=row, column=3).value = f'=IFERROR(B{row}/$B$4,"")'
         ws.cell(row=row, column=3).number_format = PERCENT_FORMAT
         ws.cell(row=row, column=4).value = (
-            f'=IFERROR(INDIRECT({_ref}&ADDRESS(1,(ROW()-ROW($D$6))*2+1+2)),"")'
+            f'=IFERROR(IF(ISBLANK(INDIRECT({_ref}&ADDRESS(1,(ROW()-ROW($D$6))*2+1+2))),"",INDIRECT({_ref}&ADDRESS(1,(ROW()-ROW($D$6))*2+1+2))),"")'
         )
         ws.cell(row=row, column=5).value = (
-            f'=IFERROR(INDIRECT({_ref}&ADDRESS(2,(ROW()-ROW($D$6))*2+1+1+2)),"")'
+            f'=IFERROR(IF(ISBLANK(INDIRECT({_ref}&ADDRESS(2,(ROW()-ROW($D$6))*2+1+1+2))),"",INDIRECT({_ref}&ADDRESS(2,(ROW()-ROW($D$6))*2+1+1+2))),"")'
         )
         ws.cell(row=row, column=5).number_format = ACCOUNTING_FORMAT
-        ws.cell(row=row, column=6).value = f"=E{row}/$B$4"
+        ws.cell(row=row, column=6).value = f'=IFERROR(E{row}/$B$4,"")'
         ws.cell(row=row, column=6).number_format = PERCENT_FORMAT
         ws.cell(row=row, column=7).value = (
-            f'=IFERROR(INDIRECT({_ref}&ADDRESS(3,(ROW()-ROW($D$6))*2+1+1+2)),"")'
+            f'=IFERROR(IF(ISBLANK(INDIRECT({_ref}&ADDRESS(3,(ROW()-ROW($D$6))*2+1+1+2))),"",INDIRECT({_ref}&ADDRESS(3,(ROW()-ROW($D$6))*2+1+1+2))),"")'
         )
         ws.cell(row=row, column=7).number_format = ACCOUNTING_FORMAT
-        ws.cell(row=row, column=8).value = f"=G{row}/$B$4"
+        ws.cell(row=row, column=8).value = f'=IFERROR(G{row}/$B$4,"")'
         ws.cell(row=row, column=8).number_format = PERCENT_FORMAT
+
+    # --- Column widths (prevents ##### for wide accounting-format numbers) ---
+    for col_letter, width in SUMMARY_COLUMN_WIDTHS.items():
+        ws.column_dimensions[col_letter].width = width
+
+    # --- Borders ---
+    # Vertical dividers: right of col C (Income | Expenses) and right of col H
+    for row in range(1, 106):
+        _update_cell_border(ws.cell(row=row, column=3), right=THIN)
+        _update_cell_border(ws.cell(row=row, column=8), right=THIN)
+
+    # Sub-dividers in header rows
+    for row in [1, 2]:
+        _update_cell_border(ws.cell(row=row, column=4), right=THIN)  # right of D1:D2
+    _update_cell_border(ws.cell(row=2, column=6), right=THIN)       # right of F2
+    _update_cell_border(ws.cell(row=4, column=6), right=THIN)       # right of F4
+
+    # Top and bottom borders on section-label row, totals row, column-header row
+    for row in [3, 4, 5]:
+        for col in range(1, 9):
+            _update_cell_border(ws.cell(row=row, column=col), top=THIN, bottom=THIN)
 
 
 def _write_category_pair(ws, col_pair_idx, cat, cat_df, bold, center):
@@ -174,6 +219,11 @@ def _write_category_pair(ws, col_pair_idx, cat, cat_df, bold, center):
     desc_col = col_pair_idx * 2 + 1
     amt_col = col_pair_idx * 2 + 2
     amt_col_letter = get_column_letter(amt_col)
+    desc_col_letter = get_column_letter(desc_col)
+
+    # Set column widths for this pair (prevents ##### for accounting numbers)
+    ws.column_dimensions[desc_col_letter].width = RECEIPTS_DESC_COL_WIDTH
+    ws.column_dimensions[amt_col_letter].width = RECEIPTS_AMT_COL_WIDTH
 
     # Row 1: category name merged across both columns (bold, centered)
     ws.cell(row=1, column=desc_col).value = cat
@@ -216,6 +266,27 @@ def _write_category_pair(ws, col_pair_idx, cat, cat_df, bold, center):
         ws.cell(row=excel_row, column=desc_col).value = tx_row["description"]
         ws.cell(row=excel_row, column=amt_col).value = tx_row["amount"]
         ws.cell(row=excel_row, column=amt_col).number_format = ACCOUNTING_FORMAT
+
+
+def _apply_receipts_borders(ws, num_pairs):
+    """
+    Apply borders to a receipts sheet after all category pairs have been written.
+
+    - Bottom border on the full width of rows 1, 4, and 5.
+    - Right border on each category's amount column (col 2, 4, 6, …) for rows 1–1001.
+    """
+    last_col = num_pairs * 2
+
+    # Bottom borders: category header row, spacer row (above Note/Amount), headers row
+    for row in [1, 4, 5]:
+        for col in range(1, last_col + 1):
+            _update_cell_border(ws.cell(row=row, column=col), bottom=THIN)
+
+    # Right border on each amount column to visually separate categories
+    for pair_idx in range(num_pairs):
+        amt_col = pair_idx * 2 + 2
+        for row in range(1, 1002):
+            _update_cell_border(ws.cell(row=row, column=amt_col), right=THIN)
 
 
 def export_to_excel(input_file_path, output_file_path="budget_export.xlsx"):
@@ -346,6 +417,8 @@ def export_to_excel(input_file_path, output_file_path="budget_export.xlsx"):
 
         for col_pair_idx, (cat, cat_df) in enumerate(col_pairs):
             _write_category_pair(ws, col_pair_idx, cat, cat_df, bold, center)
+
+        _apply_receipts_borders(ws, len(col_pairs))
 
     wb.save(output_file_path)
     return os.path.realpath(output_file_path)
