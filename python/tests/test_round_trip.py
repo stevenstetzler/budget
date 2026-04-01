@@ -4,6 +4,7 @@ Verifies that data written by export_to_excel can be read back by
 parse_receipts and produces an identical dataset.
 """
 
+import datetime
 import os
 import tempfile
 
@@ -211,6 +212,70 @@ def test_excel_sheet_names():
         assert month_sheets[1] == "3 2026 Receipts"
 
 
+def test_summary_sheet_layout():
+    """Summary tab has the full layout: Date/Cash Flow headers, Income/Expenses sections."""
+    original = _make_input_df()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        csv_path = os.path.join(tmp, "input.csv")
+        xlsx_path = os.path.join(tmp, "output.xlsx")
+
+        original.to_csv(csv_path, index=False)
+        export_to_excel(csv_path, xlsx_path)
+
+        wb = load_workbook(xlsx_path, data_only=False)
+
+    ws = wb["Summary"]
+
+    # A1 is merged and contains "Date"
+    assert ws.cell(row=1, column=1).value == "Date"
+    assert ws.cell(row=1, column=1).font.bold
+
+    # B1 is merged and contains a date (for the most-recent month)
+    assert isinstance(ws.cell(row=1, column=2).value, datetime.date)
+
+    # D1 is merged and contains "Cash Flow"
+    assert ws.cell(row=1, column=4).value == "Cash Flow"
+    assert ws.cell(row=1, column=4).font.bold
+
+    # Row 1 column headers
+    assert ws.cell(row=1, column=5).value == "Amount"
+    assert ws.cell(row=1, column=6).value == "Fraction"
+    assert ws.cell(row=1, column=7).value == "Budget"
+    assert ws.cell(row=1, column=8).value == "Fraction"
+
+    # Row 2: cash-flow formulas in E–H
+    assert ws.cell(row=2, column=5).value == "=$B$4-E4"
+    assert ws.cell(row=2, column=7).value == "=$B$4-G4"
+
+    # Row 3: section headers
+    assert ws.cell(row=3, column=1).value == "Income"
+    assert ws.cell(row=3, column=4).value == "Expenses"
+
+    # Row 4: totals row
+    assert ws.cell(row=4, column=1).value == "Total"
+    assert ws.cell(row=4, column=2).value == "=SUM(B6:B)"
+    assert ws.cell(row=4, column=4).value == "Total"
+    assert ws.cell(row=4, column=5).value == "=SUM(E6:E102)"
+
+    # Row 5: column headers
+    assert ws.cell(row=5, column=1).value == "Source"
+    assert ws.cell(row=5, column=2).value == "Amount"
+    assert ws.cell(row=5, column=4).value == "Item"
+
+    # Row 6+: formulas are present
+    assert ws.cell(row=6, column=1).value is not None
+    assert ws.cell(row=6, column=4).value is not None
+
+    # Verify merged cells: A1:A2, B1:C2, D1:D2, A3:C3, D3:H3
+    merged_strs = {str(r) for r in ws.merged_cells.ranges}
+    assert "A1:A2" in merged_strs
+    assert "B1:C2" in merged_strs
+    assert "D1:D2" in merged_strs
+    assert "A3:C3" in merged_strs
+    assert "D3:H3" in merged_strs
+
+
 def test_excel_category_row():
     """Row 1 of each data sheet contains category names at every other column."""
     original = _make_input_df()
@@ -232,6 +297,9 @@ def test_excel_category_row():
 
     assert all(pd.notna(v) for v in even_values)
     assert all(pd.isna(v) for v in odd_values)
+
+    # "Income" is always the first category
+    assert even_values[0] == "Income"
 
 
 def test_excel_structure_rows():
@@ -341,11 +409,14 @@ def test_excel_merged_category_header():
     row1_merges = [
         r for r in ws.merged_cells.ranges if r.min_row == 1 and r.max_row == 1
     ]
-    # Each category pair should produce one merged range spanning 2 columns
+    # Expected: 1 "Income" pair + one pair per unique expense category in March
     input_df = _make_input_df()
     march_rows = input_df[input_df["date"].str.startswith("3/")]
-    num_categories = len(list(dict.fromkeys(march_rows["category"].tolist())))
-    assert len(row1_merges) == num_categories
+    expense_cats = set(
+        march_rows[~march_rows["isPositive"]]["category"].tolist()
+    )
+    expected_pairs = 1 + len(expense_cats)  # Income + expense categories
+    assert len(row1_merges) == expected_pairs
 
 
 def test_invalid_file_type_raises():
