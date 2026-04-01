@@ -12,6 +12,7 @@ import pytest
 # Require pandas for these round-trip tests; skip the module if it's missing.
 pytest.importorskip("pandas")
 import pandas as pd
+from openpyxl import load_workbook
 
 from export_to_excel import export_to_excel
 from parse_receipts import parse_receipts
@@ -221,12 +222,125 @@ def test_excel_category_row():
         sheet = xl.parse("3 2026 Receipts", header=None)
 
     category_row = sheet.iloc[0]
-    # Even columns hold category names; odd columns are empty
+    # Even columns hold category names; odd columns are empty (merged cell spans both)
     even_values = [v for i, v in enumerate(category_row) if i % 2 == 0]
     odd_values = [v for i, v in enumerate(category_row) if i % 2 == 1]
 
     assert all(pd.notna(v) for v in even_values)
     assert all(pd.isna(v) for v in odd_values)
+
+
+def test_excel_structure_rows():
+    """Verifies Total, Budget, and Note/Amount header rows in each data sheet."""
+    original = _make_input_df()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        csv_path = os.path.join(tmp, "input.csv")
+        xlsx_path = os.path.join(tmp, "output.xlsx")
+
+        original.to_csv(csv_path, index=False)
+        export_to_excel(csv_path, xlsx_path)
+
+        xl = pd.ExcelFile(xlsx_path)
+        sheet = xl.parse("3 2026 Receipts", header=None)
+
+    # Row 2 (index 1): description columns hold "Total"
+    total_row = sheet.iloc[1]
+    desc_vals = [total_row.iloc[i] for i in range(0, len(total_row), 2)]
+    assert all(v == "Total" for v in desc_vals)
+
+    # Row 3 (index 2): description columns hold "Budget"
+    budget_row = sheet.iloc[2]
+    budget_desc_vals = [budget_row.iloc[i] for i in range(0, len(budget_row), 2)]
+    assert all(v == "Budget" for v in budget_desc_vals)
+
+    # Row 5 (index 4): "Note" in description columns, "Amount" in amount columns
+    note_row = sheet.iloc[4]
+    note_vals = [note_row.iloc[i] for i in range(0, len(note_row), 2)]
+    amount_header_vals = [note_row.iloc[i] for i in range(1, len(note_row), 2)]
+    assert all(v == "Note" for v in note_vals)
+    assert all(v == "Amount" for v in amount_header_vals)
+
+    # Transactions start at row 6 (index 5)
+    first_tx_desc = sheet.iloc[5, 0]
+    assert pd.notna(first_tx_desc)
+
+
+def test_excel_bold_formatting():
+    """Category names, Total, Budget, and Amount cells are bold."""
+    original = _make_input_df()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        csv_path = os.path.join(tmp, "input.csv")
+        xlsx_path = os.path.join(tmp, "output.xlsx")
+
+        original.to_csv(csv_path, index=False)
+        export_to_excel(csv_path, xlsx_path)
+
+        wb = load_workbook(xlsx_path)
+
+    ws = wb["3 2026 Receipts"]
+
+    # Row 1, col 1 (A1): category name — bold
+    assert ws.cell(row=1, column=1).font.bold
+
+    # Row 2, col 1 (A2): "Total" — bold
+    assert ws.cell(row=2, column=1).font.bold
+
+    # Row 3, col 1 (A3): "Budget" — bold
+    assert ws.cell(row=3, column=1).font.bold
+
+    # Row 5, col 1 (A5): "Note" — bold
+    assert ws.cell(row=5, column=1).font.bold
+
+    # Row 5, col 2 (B5): "Amount" — bold
+    assert ws.cell(row=5, column=2).font.bold
+
+
+def test_excel_total_formula():
+    """Row 2 amount cells contain a SUM formula referencing row 6 onward."""
+    original = _make_input_df()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        csv_path = os.path.join(tmp, "input.csv")
+        xlsx_path = os.path.join(tmp, "output.xlsx")
+
+        original.to_csv(csv_path, index=False)
+        export_to_excel(csv_path, xlsx_path)
+
+        # data_only=False preserves formula strings
+        wb = load_workbook(xlsx_path, data_only=False)
+
+    ws = wb["3 2026 Receipts"]
+    # B2: SUM formula for first category
+    formula = ws.cell(row=2, column=2).value
+    assert formula is not None
+    assert formula.startswith("=SUM(B6:")
+
+
+def test_excel_merged_category_header():
+    """Category header cells are merged across both description and amount columns."""
+    original = _make_input_df()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        csv_path = os.path.join(tmp, "input.csv")
+        xlsx_path = os.path.join(tmp, "output.xlsx")
+
+        original.to_csv(csv_path, index=False)
+        export_to_excel(csv_path, xlsx_path)
+
+        wb = load_workbook(xlsx_path)
+
+    ws = wb["3 2026 Receipts"]
+    # Collect all merged ranges in row 1
+    row1_merges = [
+        r for r in ws.merged_cells.ranges if r.min_row == 1 and r.max_row == 1
+    ]
+    # Each category pair should produce one merged range spanning 2 columns
+    input_df = _make_input_df()
+    march_rows = input_df[input_df["date"].str.startswith("3/")]
+    num_categories = len(list(dict.fromkeys(march_rows["category"].tolist())))
+    assert len(row1_merges) == num_categories
 
 
 def test_invalid_file_type_raises():

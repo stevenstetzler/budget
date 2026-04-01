@@ -2,6 +2,9 @@ import argparse
 import os
 
 import pandas as pd
+from openpyxl import Workbook
+from openpyxl.styles import Font
+from openpyxl.utils import get_column_letter
 
 
 def export_to_excel(input_file_path, output_file_path="budget_export.xlsx"):
@@ -10,6 +13,8 @@ def export_to_excel(input_file_path, output_file_path="budget_export.xlsx"):
     the legacy Excel spreadsheet format.
 
     Input columns expected: date, category, description, amount
+    (isPositive is accepted in the input but not written to Excel;
+    parse_receipts.py derives it from the category name on import)
 
     The date column may use any format pandas can parse, including
     "M/D/YYYY" (e.g. "3/1/2026"), "YYYY-MM-DD" (e.g. "2026-03-01"),
@@ -18,9 +23,13 @@ def export_to_excel(input_file_path, output_file_path="budget_export.xlsx"):
     Output Excel structure:
     - Sheet 1: "Summary" (placeholder; parse_receipts.py skips the first sheet)
     - One additional sheet per month, named "M YYYY Receipts" (e.g. "3 2026 Receipts")
-      - Row 1  (index 0): category names in columns 0, 2, 4, ...
-      - Rows 2-5 (indices 1-4): empty
-      - Row 6+  (index 5+): description (left col) / amount (right col) per category
+      Each category occupies a pair of columns (description / amount):
+      - Row 1: category name, merged across both columns, bold
+      - Row 2: "Total" (bold) | =SUM formula for the amount column
+      - Row 3: "Budget" (bold) | budgeted amount (0 when not supplied)
+      - Row 4: empty
+      - Row 5: "Note" (bold) | "Amount" (bold)  — column headers
+      - Row 6+: description (left col) / amount (right col) per transaction
 
     Parameters
     ----------
@@ -64,55 +73,73 @@ def export_to_excel(input_file_path, output_file_path="budget_export.xlsx"):
 
     df["_month"], df["_year"] = zip(*df["date"].apply(_extract_month_year))
 
-    with pd.ExcelWriter(output_file_path, engine="openpyxl") as writer:
-        # First sheet: placeholder (parse_receipts.py skips the first sheet)
-        pd.DataFrame().to_excel(writer, sheet_name="Summary", index=False)
+    bold = Font(bold=True)
 
-        # One sheet per month, ordered chronologically in ascending order
-        month_groups = (
-            df.groupby(["_year", "_month"], sort=True)
-        )
+    wb = Workbook()
+    # Rename the default sheet to "Summary" (parse_receipts.py skips sheet 0)
+    wb.active.title = "Summary"
 
-        for (year, month), group in sorted(
-            month_groups, key=lambda x: (x[0][0], x[0][1])
-        ):
-            sheet_name = f"{month} {year} Receipts"
+    # One sheet per month, ordered chronologically in ascending order
+    month_groups = df.groupby(["_year", "_month"], sort=True)
 
-            # Determine the unique categories for this month (preserve insertion order)
-            categories = list(dict.fromkeys(group["category"].tolist()))
+    for (year, month), group in sorted(
+        month_groups, key=lambda x: (x[0][0], x[0][1])
+    ):
+        sheet_name = f"{month} {year} Receipts"
+        ws = wb.create_sheet(title=sheet_name)
 
-            # Build the sheet data as a 2-D list of rows
-            # Determine the number of rows needed: 5 header rows + max transactions
-            transactions_per_category = {
-                cat: group[group["category"] == cat].reset_index(drop=True)
-                for cat in categories
-            }
-            max_rows = max(
-                (len(t) for t in transactions_per_category.values()), default=0
-            )
-            total_rows = 5 + max_rows  # rows 0-4 are header area; rows 5+ are data
+        # Unique categories for this month (preserve insertion order)
+        categories = list(dict.fromkeys(group["category"].tolist()))
 
-            num_cols = len(categories) * 2
-            sheet_data = [
-                [None] * num_cols for _ in range(total_rows)
-            ]
+        transactions_per_category = {
+            cat: group[group["category"] == cat].reset_index(drop=True)
+            for cat in categories
+        }
 
-            # Row 0 (Excel row 1): category names in columns 0, 2, 4, ...
-            for col_pair, cat in enumerate(categories):
-                sheet_data[0][col_pair * 2] = cat
+        for col_pair, cat in enumerate(categories):
+            # openpyxl uses 1-based row/column indices
+            desc_col = col_pair * 2 + 1   # left column of this category pair
+            amt_col = col_pair * 2 + 2    # right column of this category pair
+            amt_col_letter = get_column_letter(amt_col)
 
-            # Rows 5+ (Excel rows 6+): description (left) and amount (right)
-            for col_pair, cat in enumerate(categories):
-                cat_df = transactions_per_category[cat]
-                for row_offset, tx_row in cat_df.iterrows():
-                    row_idx = 5 + row_offset
-                    sheet_data[row_idx][col_pair * 2] = tx_row["description"]
-                    sheet_data[row_idx][col_pair * 2 + 1] = tx_row["amount"]
-
-            pd.DataFrame(sheet_data).to_excel(
-                writer, sheet_name=sheet_name, index=False, header=False
+            # Row 1: category name merged across both columns (bold)
+            ws.cell(row=1, column=desc_col).value = cat
+            ws.cell(row=1, column=desc_col).font = bold
+            ws.merge_cells(
+                start_row=1, start_column=desc_col,
+                end_row=1, end_column=amt_col,
             )
 
+            # Row 2: "Total" | SUM formula (transactions start at row 6;
+            # end row 1001 is a large upper bound that covers any realistic
+            # number of transactions, matching the legacy spreadsheet convention)
+            ws.cell(row=2, column=desc_col).value = "Total"
+            ws.cell(row=2, column=desc_col).font = bold
+            ws.cell(row=2, column=amt_col).value = (
+                f"=SUM({amt_col_letter}6:{amt_col_letter}1001)"
+            )
+
+            # Row 3: "Budget" | budgeted amount (0 when not supplied by input)
+            ws.cell(row=3, column=desc_col).value = "Budget"
+            ws.cell(row=3, column=desc_col).font = bold
+            ws.cell(row=3, column=amt_col).value = 0
+
+            # Row 4: empty (spacer)
+
+            # Row 5: "Note" | "Amount" column headers (both bold)
+            ws.cell(row=5, column=desc_col).value = "Note"
+            ws.cell(row=5, column=desc_col).font = bold
+            ws.cell(row=5, column=amt_col).value = "Amount"
+            ws.cell(row=5, column=amt_col).font = bold
+
+            # Rows 6+: transactions
+            cat_df = transactions_per_category[cat]
+            for row_offset, tx_row in cat_df.iterrows():
+                excel_row = 6 + row_offset
+                ws.cell(row=excel_row, column=desc_col).value = tx_row["description"]
+                ws.cell(row=excel_row, column=amt_col).value = tx_row["amount"]
+
+    wb.save(output_file_path)
     return os.path.realpath(output_file_path)
 
 
