@@ -37,7 +37,7 @@ def _write_summary_sheet(ws, most_recent_month, most_recent_year):
     A3:C3   "Income"            (merged, bold, centered)
     D3:H3   "Expenses"          (merged, bold, centered)
     A4      "Total"             (bold)
-    B4      =SUM(B6:B)
+    B4      =SUM(B6:B1048576)
     D4      "Total"             (bold)
     E4      =SUM(E6:E102)
     F4      =E4/$B$4
@@ -98,7 +98,7 @@ def _write_summary_sheet(ws, most_recent_month, most_recent_year):
     # --- Row 4 — totals ---
     ws.cell(row=4, column=1).value = "Total"
     ws.cell(row=4, column=1).font = bold
-    ws.cell(row=4, column=2).value = "=SUM(B6:B)"
+    ws.cell(row=4, column=2).value = "=SUM(B6:B1048576)"
     ws.cell(row=4, column=4).value = "Total"
     ws.cell(row=4, column=4).font = bold
     ws.cell(row=4, column=5).value = "=SUM(E6:E102)"
