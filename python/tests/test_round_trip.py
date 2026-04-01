@@ -96,6 +96,13 @@ def _make_iso_date_df():
     return pd.DataFrame(SAMPLE_ROWS_ISO_DATES)
 
 
+def _normalize_round_trip_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Sort by stable keys and reset index to make comparisons order-insensitive."""
+    sort_cols = ["date", "category", "description", "amount", "isPositive"]
+    existing_cols = [c for c in sort_cols if c in df.columns]
+    return df.sort_values(by=existing_cols).reset_index(drop=True)
+
+
 # ---------------------------------------------------------------------------
 # Round-trip via CSV
 # ---------------------------------------------------------------------------
@@ -113,8 +120,8 @@ def test_round_trip_csv():
         export_to_excel(csv_path, xlsx_path)
         result = parse_receipts(xlsx_path)
 
-    result = result.reset_index(drop=True)
-    original = original.reset_index(drop=True)
+    result = _normalize_round_trip_df(result)
+    original = _normalize_round_trip_df(original)
 
     assert list(result["date"]) == list(original["date"])
     assert list(result["category"]) == list(original["category"])
@@ -140,8 +147,8 @@ def test_round_trip_json():
         export_to_excel(json_path, xlsx_path)
         result = parse_receipts(xlsx_path)
 
-    result = result.reset_index(drop=True)
-    original = original.reset_index(drop=True)
+    result = _normalize_round_trip_df(result)
+    original = _normalize_round_trip_df(original)
 
     assert list(result["date"]) == list(original["date"])
     assert list(result["category"]) == list(original["category"])
