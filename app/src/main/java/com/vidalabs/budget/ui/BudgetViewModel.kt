@@ -513,7 +513,13 @@ class BudgetViewModel(
                 val date = parseDate(parts.getOrElse(dateIdx) { "" })
                 val category = parts.getOrElse(categoryIdx) { "" }
                     .takeIf { it.isNotBlank() } ?: throw IllegalArgumentException("empty category")
-                val amount = abs(parts.getOrElse(amountIdx) { "" }.toDouble())
+                val amountText = parts.getOrElse(amountIdx) { "" }
+                val parsedAmount = parseAmount(amountText)
+                val amount = abs(parsedAmount).also {
+                    if (!it.isFinite()) {
+                        throw IllegalArgumentException("amount must be a finite number")
+                    }
+                }
                 val description = if (descriptionIdx >= 0) {
                     parts.getOrNull(descriptionIdx)?.takeIf { it.isNotBlank() }
                 } else null
