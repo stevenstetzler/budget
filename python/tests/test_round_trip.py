@@ -7,8 +7,11 @@ parse_receipts and produces an identical dataset.
 import os
 import tempfile
 
-import pandas as pd
 import pytest
+
+# Require pandas for these round-trip tests; skip the module if it's missing.
+pytest.importorskip("pandas")
+import pandas as pd
 
 from export_to_excel import export_to_excel
 from parse_receipts import parse_receipts
