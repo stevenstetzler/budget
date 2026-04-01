@@ -51,7 +51,7 @@ fun SummaryPane(vm: BudgetViewModel, modifier: Modifier = Modifier) {
         val spending = rows.filter { !it.isPositive }
 
         fun mainRows(rs: List<SummaryBudgetRow>) =
-            rs.filter { it.budget > 0.0 || it.actual > 0.0 }
+            rs.filter { it.budget > 0.0 || it.actual != 0.0 }
                 .sortedByDescending { it.actual }
 
         fun otherRows(rs: List<SummaryBudgetRow>) =

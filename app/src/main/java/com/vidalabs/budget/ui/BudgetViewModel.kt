@@ -19,11 +19,8 @@ import java.time.YearMonth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import com.vidalabs.budget.data.TransactionRow
-import kotlin.math.abs
 
 data class EntryUiState(
     val date: LocalDate = LocalDate.now(),
@@ -41,15 +38,6 @@ data class ImportResult(
 data class ExportResult(
     val exported: Int,
     val error: String? = null
-)
-
-@Serializable
-private data class JsonImportRecord(
-    val date: String,
-    val category: String,
-    val isPositive: Boolean,
-    val amount: Double,
-    val description: String? = null
 )
 
 private data class ImportRecord(
@@ -513,12 +501,15 @@ class BudgetViewModel(
                 val date = parseDate(parts.getOrElse(dateIdx) { "" })
                 val category = parts.getOrElse(categoryIdx) { "" }
                     .takeIf { it.isNotBlank() } ?: throw IllegalArgumentException("empty category")
-                val amount = parts.getOrElse(amountIdx) { "" }.toDouble()
+                val isPositive = parts.getOrElse(isPositiveIdx) { "" }
+                    .trim().lowercase() == "true"
+                val amountText = parts.getOrElse(amountIdx) { "" }
+                val csvAmount = parseAmount(amountText)
+                    ?: throw IllegalArgumentException("invalid amount: '$amountText'")
+                val amount = csvAmount
                 val description = if (descriptionIdx >= 0) {
                     parts.getOrNull(descriptionIdx)?.takeIf { it.isNotBlank() }
                 } else null
-                val isPositive = parts.getOrElse(isPositiveIdx) { "" }
-                    .trim().lowercase() == "true"
                 records.add(
                     ImportRecord(
                         date = date,
@@ -569,43 +560,7 @@ class BudgetViewModel(
 
     suspend fun buildExportContent(isJson: Boolean): Pair<String, Int> = withContext(Dispatchers.IO) {
         val transactions = repo.getAllTransactions()
-        val content = if (isJson) buildExportJson(transactions) else buildExportCsv(transactions)
+        val content = if (isJson) buildTransactionJson(transactions) else buildTransactionCsv(transactions)
         content to transactions.size
-    }
-
-    private val exportJson = Json { prettyPrint = true }
-
-    private fun buildExportJson(transactions: List<TransactionRow>): String {
-        val records = transactions.map { t ->
-            JsonImportRecord(
-                date = LocalDate.ofEpochDay(t.epochDay).format(DateTimeFormatter.ISO_LOCAL_DATE),
-                category = t.categoryName,
-                isPositive = t.isPositive,
-                amount = abs(t.amount),
-                description = t.description
-            )
-        }
-        return exportJson.encodeToString(records)
-    }
-
-    private fun buildExportCsv(transactions: List<TransactionRow>): String {
-        val sb = StringBuilder()
-        sb.appendLine("date,category,amount,description,isPositive")
-        for (t in transactions) {
-            val date = LocalDate.ofEpochDay(t.epochDay).format(DateTimeFormatter.ISO_LOCAL_DATE)
-            val category = escapeCsvField(t.categoryName)
-            val amount = abs(t.amount)
-            val description = t.description?.let { escapeCsvField(it) } ?: ""
-            sb.appendLine("$date,$category,$amount,$description,${t.isPositive}")
-        }
-        return sb.toString()
-    }
-
-    private fun escapeCsvField(field: String): String {
-        return if (field.contains(',') || field.contains('"') || field.contains('\n')) {
-            "\"${field.replace("\"", "\"\"")}\""
-        } else {
-            field
-        }
     }
 }
