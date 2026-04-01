@@ -191,7 +191,7 @@ def test_round_trip_iso_dates():
 
 
 def test_excel_sheet_names():
-    """Exported workbook has a Summary sheet plus one sheet per month."""
+    """Exported workbook has a Summary sheet plus one sheet per month in descending order."""
     original = _make_input_df()
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -205,6 +205,10 @@ def test_excel_sheet_names():
         assert xl.sheet_names[0] == "Summary"
         assert "3 2026 Receipts" in xl.sheet_names
         assert "4 2026 Receipts" in xl.sheet_names
+        # Latest month should appear first after Summary (descending order)
+        month_sheets = [s for s in xl.sheet_names if s != "Summary"]
+        assert month_sheets[0] == "4 2026 Receipts"
+        assert month_sheets[1] == "3 2026 Receipts"
 
 
 def test_excel_category_row():
@@ -281,8 +285,9 @@ def test_excel_bold_formatting():
 
     ws = wb["3 2026 Receipts"]
 
-    # Row 1, col 1 (A1): category name — bold
+    # Row 1, col 1 (A1): category name — bold and centered
     assert ws.cell(row=1, column=1).font.bold
+    assert ws.cell(row=1, column=1).alignment.horizontal == "center"
 
     # Row 2, col 1 (A2): "Total" — bold
     assert ws.cell(row=2, column=1).font.bold

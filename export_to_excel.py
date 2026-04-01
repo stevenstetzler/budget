@@ -3,7 +3,7 @@ import os
 
 import pandas as pd
 from openpyxl import Workbook
-from openpyxl.styles import Font
+from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
 
@@ -24,7 +24,7 @@ def export_to_excel(input_file_path, output_file_path="budget_export.xlsx"):
     - Sheet 1: "Summary" (placeholder; parse_receipts.py skips the first sheet)
     - One additional sheet per month, named "M YYYY Receipts" (e.g. "3 2026 Receipts")
       Each category occupies a pair of columns (description / amount):
-      - Row 1: category name, merged across both columns, bold
+      - Row 1: category name, merged across both columns, bold, centered
       - Row 2: "Total" (bold) | =SUM formula for the amount column
       - Row 3: "Budget" (bold) | budgeted amount (0 when not supplied)
       - Row 4: empty
@@ -74,16 +74,18 @@ def export_to_excel(input_file_path, output_file_path="budget_export.xlsx"):
     df["_month"], df["_year"] = zip(*df["date"].apply(_extract_month_year))
 
     bold = Font(bold=True)
+    centered_bold = Font(bold=True)
+    center = Alignment(horizontal="center")
 
     wb = Workbook()
     # Rename the default sheet to "Summary" (parse_receipts.py skips sheet 0)
     wb.active.title = "Summary"
 
-    # One sheet per month, ordered chronologically in ascending order
+    # One sheet per month, ordered in descending order (latest month first)
     month_groups = df.groupby(["_year", "_month"], sort=True)
 
     for (year, month), group in sorted(
-        month_groups, key=lambda x: (x[0][0], x[0][1])
+        month_groups, key=lambda x: (x[0][0], x[0][1]), reverse=True
     ):
         sheet_name = f"{month} {year} Receipts"
         ws = wb.create_sheet(title=sheet_name)
@@ -102,9 +104,10 @@ def export_to_excel(input_file_path, output_file_path="budget_export.xlsx"):
             amt_col = col_pair * 2 + 2    # right column of this category pair
             amt_col_letter = get_column_letter(amt_col)
 
-            # Row 1: category name merged across both columns (bold)
+            # Row 1: category name merged across both columns (bold, centered)
             ws.cell(row=1, column=desc_col).value = cat
-            ws.cell(row=1, column=desc_col).font = bold
+            ws.cell(row=1, column=desc_col).font = centered_bold
+            ws.cell(row=1, column=desc_col).alignment = center
             ws.merge_cells(
                 start_row=1, start_column=desc_col,
                 end_row=1, end_column=amt_col,
