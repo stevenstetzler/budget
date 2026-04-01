@@ -21,7 +21,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import com.vidalabs.budget.data.TransactionRow
-import kotlin.math.abs
 
 data class EntryUiState(
     val date: LocalDate = LocalDate.now(),
@@ -468,7 +467,7 @@ class BudgetViewModel(
                         date = parseDate(r.date),
                         category = r.category.trim(),
                         isPositive = r.isPositive,
-                        amount = abs(r.amount),
+                        amount = if (r.isPositive) r.amount else -r.amount,
                         description = r.description?.trim()?.takeIf { it.isNotEmpty() }
                     )
                 )
@@ -502,14 +501,15 @@ class BudgetViewModel(
                 val date = parseDate(parts.getOrElse(dateIdx) { "" })
                 val category = parts.getOrElse(categoryIdx) { "" }
                     .takeIf { it.isNotBlank() } ?: throw IllegalArgumentException("empty category")
+                val isPositive = parts.getOrElse(isPositiveIdx) { "" }
+                    .trim().lowercase() == "true"
                 val amountText = parts.getOrElse(amountIdx) { "" }
-                val amount = abs(parseAmount(amountText)
-                    ?: throw IllegalArgumentException("invalid amount: '$amountText'"))
+                val csvAmount = parseAmount(amountText)
+                    ?: throw IllegalArgumentException("invalid amount: '$amountText'")
+                val amount = if (isPositive) csvAmount else -csvAmount
                 val description = if (descriptionIdx >= 0) {
                     parts.getOrNull(descriptionIdx)?.takeIf { it.isNotBlank() }
                 } else null
-                val isPositive = parts.getOrElse(isPositiveIdx) { "" }
-                    .trim().lowercase() == "true"
                 records.add(
                     ImportRecord(
                         date = date,
