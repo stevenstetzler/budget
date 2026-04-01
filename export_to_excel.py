@@ -7,6 +7,15 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
+# Number formats
+# Sections: positive, negative (parentheses), zero, text
+ACCOUNTING_FORMAT = '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)'
+PERCENT_FORMAT = "0%"
+
+# Expense category priority order (after "Income").  Categories not listed
+# here are appended in first-seen insertion order.
+PRIORITY_CATS = ["withholding", "taxes", "savings", "rent", "utilities", "car"]
+
 
 def _to_bool(val):
     """Coerce truthy/falsy values (bool, str, int) to Python bool."""
@@ -73,16 +82,21 @@ def _write_summary_sheet(ws, most_recent_month, most_recent_year):
     for col, text in [(5, "Amount"), (6, "Fraction"), (7, "Budget"), (8, "Fraction")]:
         ws.cell(row=1, column=col).value = text
         ws.cell(row=1, column=col).font = bold
+        ws.cell(row=1, column=col).alignment = center
 
     # Row 2 — cash flow formulas
     ws.cell(row=2, column=5).value = "=$B$4-E4"
+    ws.cell(row=2, column=5).number_format = ACCOUNTING_FORMAT
     ws.cell(row=2, column=6).value = (
         '=IFERROR(INDIRECT(ADDRESS(ROW(),COLUMN()-1))/$B$4,"")'
     )
+    ws.cell(row=2, column=6).number_format = PERCENT_FORMAT
     ws.cell(row=2, column=7).value = "=$B$4-G4"
+    ws.cell(row=2, column=7).number_format = ACCOUNTING_FORMAT
     ws.cell(row=2, column=8).value = (
         '=IFERROR(INDIRECT(ADDRESS(ROW(),COLUMN()-1))/$B$4,"")'
     )
+    ws.cell(row=2, column=8).number_format = PERCENT_FORMAT
 
     # --- Row 3 — section labels ---
     ws.merge_cells(start_row=3, start_column=1, end_row=3, end_column=3)
@@ -98,13 +112,20 @@ def _write_summary_sheet(ws, most_recent_month, most_recent_year):
     # --- Row 4 — totals ---
     ws.cell(row=4, column=1).value = "Total"
     ws.cell(row=4, column=1).font = bold
+    ws.cell(row=4, column=1).alignment = center
     ws.cell(row=4, column=2).value = "=SUM(B6:B1048576)"
+    ws.cell(row=4, column=2).number_format = ACCOUNTING_FORMAT
     ws.cell(row=4, column=4).value = "Total"
     ws.cell(row=4, column=4).font = bold
+    ws.cell(row=4, column=4).alignment = center
     ws.cell(row=4, column=5).value = "=SUM(E6:E102)"
+    ws.cell(row=4, column=5).number_format = ACCOUNTING_FORMAT
     ws.cell(row=4, column=6).value = "=E4/$B$4"
+    ws.cell(row=4, column=6).number_format = PERCENT_FORMAT
     ws.cell(row=4, column=7).value = "=SUM(G6:G102)"
+    ws.cell(row=4, column=7).number_format = ACCOUNTING_FORMAT
     ws.cell(row=4, column=8).value = "=G4/$B$4"
+    ws.cell(row=4, column=8).number_format = PERCENT_FORMAT
 
     # --- Row 5 — column headers ---
     for col, text in [
@@ -113,6 +134,7 @@ def _write_summary_sheet(ws, most_recent_month, most_recent_year):
     ]:
         ws.cell(row=5, column=col).value = text
         ws.cell(row=5, column=col).font = bold
+        ws.cell(row=5, column=col).alignment = center
 
     # --- Rows 6–105 — per-row formulas ---
     # Income (cols A–C): individual income transactions from the receipts sheet
@@ -127,18 +149,24 @@ def _write_summary_sheet(ws, most_recent_month, most_recent_year):
         ws.cell(row=row, column=2).value = (
             f'=IFERROR(INDIRECT({_ref}&ADDRESS(ROW(),2)),"")'
         )
+        ws.cell(row=row, column=2).number_format = ACCOUNTING_FORMAT
         ws.cell(row=row, column=3).value = f"=B{row}/$B$4"
+        ws.cell(row=row, column=3).number_format = PERCENT_FORMAT
         ws.cell(row=row, column=4).value = (
             f'=IFERROR(INDIRECT({_ref}&ADDRESS(1,(ROW()-ROW($D$6))*2+1+2)),"")'
         )
         ws.cell(row=row, column=5).value = (
             f'=IFERROR(INDIRECT({_ref}&ADDRESS(2,(ROW()-ROW($D$6))*2+1+1+2)),"")'
         )
+        ws.cell(row=row, column=5).number_format = ACCOUNTING_FORMAT
         ws.cell(row=row, column=6).value = f"=E{row}/$B$4"
+        ws.cell(row=row, column=6).number_format = PERCENT_FORMAT
         ws.cell(row=row, column=7).value = (
             f'=IFERROR(INDIRECT({_ref}&ADDRESS(3,(ROW()-ROW($D$6))*2+1+1+2)),"")'
         )
+        ws.cell(row=row, column=7).number_format = ACCOUNTING_FORMAT
         ws.cell(row=row, column=8).value = f"=G{row}/$B$4"
+        ws.cell(row=row, column=8).number_format = PERCENT_FORMAT
 
 
 def _write_category_pair(ws, col_pair_idx, cat, cat_df, bold, center):
@@ -156,31 +184,38 @@ def _write_category_pair(ws, col_pair_idx, cat, cat_df, bold, center):
         end_row=1, end_column=amt_col,
     )
 
-    # Row 2: "Total" | SUM formula
+    # Row 2: "Total" | SUM formula (accounting format)
     ws.cell(row=2, column=desc_col).value = "Total"
     ws.cell(row=2, column=desc_col).font = bold
+    ws.cell(row=2, column=desc_col).alignment = center
     ws.cell(row=2, column=amt_col).value = (
         f"=SUM({amt_col_letter}6:{amt_col_letter}1001)"
     )
+    ws.cell(row=2, column=amt_col).number_format = ACCOUNTING_FORMAT
 
-    # Row 3: "Budget" | 0
+    # Row 3: "Budget" | budgeted amount (accounting format)
     ws.cell(row=3, column=desc_col).value = "Budget"
     ws.cell(row=3, column=desc_col).font = bold
+    ws.cell(row=3, column=desc_col).alignment = center
     ws.cell(row=3, column=amt_col).value = 0
+    ws.cell(row=3, column=amt_col).number_format = ACCOUNTING_FORMAT
 
     # Row 4: empty (spacer)
 
-    # Row 5: "Note" | "Amount" column headers (both bold)
+    # Row 5: "Note" | "Amount" column headers (both bold, centered)
     ws.cell(row=5, column=desc_col).value = "Note"
     ws.cell(row=5, column=desc_col).font = bold
+    ws.cell(row=5, column=desc_col).alignment = center
     ws.cell(row=5, column=amt_col).value = "Amount"
     ws.cell(row=5, column=amt_col).font = bold
+    ws.cell(row=5, column=amt_col).alignment = center
 
-    # Rows 6+: transactions
+    # Rows 6+: transactions (accounting format on amount column)
     for tx_idx, tx_row in cat_df.iterrows():
         excel_row = 6 + tx_idx
         ws.cell(row=excel_row, column=desc_col).value = tx_row["description"]
         ws.cell(row=excel_row, column=amt_col).value = tx_row["amount"]
+        ws.cell(row=excel_row, column=amt_col).number_format = ACCOUNTING_FORMAT
 
 
 def export_to_excel(input_file_path, output_file_path="budget_export.xlsx"):
@@ -278,6 +313,12 @@ def export_to_excel(input_file_path, output_file_path="budget_export.xlsx"):
         sheet_name = f"{month} {year} Receipts"
         ws = wb.create_sheet(title=sheet_name)
 
+        # Sort transactions by date ascending within the month group
+        group = group.copy()
+        group["_date_parsed"] = pd.to_datetime(group["date"])
+        group = group.sort_values("_date_parsed").drop(columns=["_date_parsed"])
+        group = group.reset_index(drop=True)
+
         # Separate income (isPositive=True) and expense transactions.
         # If no isPositive column is present, treat all as expenses.
         if "isPositive" in group.columns:
@@ -288,8 +329,14 @@ def export_to_excel(input_file_path, output_file_path="budget_export.xlsx"):
         income_df = group[income_mask].reset_index(drop=True)
         expense_df = group[~income_mask].reset_index(drop=True)
 
-        # Expense categories in first-seen insertion order
-        expense_cats = list(dict.fromkeys(expense_df["category"].tolist()))
+        # Expense categories: apply priority ordering (PRIORITY_CATS first,
+        # then any remaining categories in first-seen insertion order).
+        _priority_map = {cat: i for i, cat in enumerate(PRIORITY_CATS)}
+        seen_order = list(dict.fromkeys(expense_df["category"].tolist()))
+        expense_cats = sorted(
+            seen_order,
+            key=lambda c: (_priority_map.get(c.lower(), len(PRIORITY_CATS)), seen_order.index(c)),
+        )
 
         # "Income" is always the first column pair; expense categories follow
         col_pairs = [("Income", income_df)] + [

@@ -178,12 +178,17 @@ def test_round_trip_iso_dates():
         export_to_excel(csv_path, xlsx_path)
         result = parse_receipts(xlsx_path)
 
-    result = result.reset_index(drop=True)
+    assert sorted(result["date"].tolist()) == sorted(expected_dates)
 
-    assert list(result["date"]) == expected_dates
-    assert list(result["category"]) == list(original["category"])
-    assert list(result["description"]) == list(original["description"])
-    assert list(result["amount"]) == pytest.approx(list(original["amount"]))
+    # Compare category/description/amount independent of row order (category
+    # priority ordering may differ from original insertion order).
+    sort_keys = ["category", "description", "amount"]
+    result_sorted = result.sort_values(by=sort_keys).reset_index(drop=True)
+    original_sorted = original.sort_values(by=sort_keys).reset_index(drop=True)
+
+    assert list(result_sorted["category"]) == list(original_sorted["category"])
+    assert list(result_sorted["description"]) == list(original_sorted["description"])
+    assert list(result_sorted["amount"]) == pytest.approx(list(original_sorted["amount"]))
 
 
 # ---------------------------------------------------------------------------
