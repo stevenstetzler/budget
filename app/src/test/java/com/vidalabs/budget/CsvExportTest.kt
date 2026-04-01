@@ -11,14 +11,13 @@ import java.time.LocalDate
 /**
  * Tests that CSV/JSON export preserves the sign (+/-) of transaction amounts.
  *
- * TransactionRow.amount is stored as a signed value in the database
- * (negative for expenses, positive for income). The exported CSV/JSON should
- * reflect this sign so that users can distinguish income from expenses
- * without relying solely on the isPositive boolean column.
+ * The CSV/JSON `amount` column uses the user-facing signed convention:
+ *   - positive = natural direction of the category (expense = cash outflow, income = cash inflow)
+ *   - negative = reversal (expense refund or income loss)
  *
- * Import round-trip formula (inverse of importTransaction's own formula):
- *   amountPositive = if (isPositive) csvAmount else -csvAmount
- * This restores the original amountPositive for both normal and unusual-polarity entries.
+ * Import round-trip formula: `amountPositive = csvAmount`
+ * (The exported amount IS the amountPositive value; importTransaction then applies the
+ * category sign internally via `if (isPositive) amountPositive else -amountPositive`.)
  */
 class CsvExportTest {
 
@@ -30,10 +29,11 @@ class CsvExportTest {
 
     private val epochDay2024 = LocalDate.of(2024, 1, 1).toEpochDay()
 
-    // Expense amounts are stored as negative in the DB. Exporting abs() would
-    // hide the polarity; the signed value must be preserved in the CSV.
+    // Normal expense: DB stores -50.0 (negative = cash outflow). The export uses
+    // the user-facing convention where a positive number means "I spent money",
+    // so it should export as +50.0 (positive magnitude for a cash outflow).
     @Test
-    fun `expense transaction exports with negative amount`() {
+    fun `expense transaction exports with positive amount`() {
         val expense = TransactionRow(
             uid = "uid1",
             epochDay = epochDay2024,
@@ -46,12 +46,12 @@ class CsvExportTest {
         val lines = csv.trim().lines()
         assertEquals(2, lines.size)  // header + 1 data row
         val exportedAmount = parseAmountFromCsvLine(lines[1])
-        assertTrue("Expense amount should be negative in export", exportedAmount < 0)
-        assertEquals(-50.0, exportedAmount, 0.001)
+        assertTrue("Expense amount should be positive in export (user-facing convention)", exportedAmount > 0)
+        assertEquals(50.0, exportedAmount, 0.001)
     }
 
-    // Income amounts are stored as positive in the DB. The positive value must
-    // be preserved in the exported CSV.
+    // Income amounts are stored as positive in the DB and represent positive cash flow.
+    // The export should preserve the positive value.
     @Test
     fun `income transaction exports with positive amount`() {
         val income = TransactionRow(
@@ -70,8 +70,48 @@ class CsvExportTest {
         assertEquals(100.0, exportedAmount, 0.001)
     }
 
+    // An income reversal/loss: DB stores -200.0. Export should show -200.0 (negative
+    // income = cash outflow). isPositive=true so the sign is preserved as-is.
+    @Test
+    fun `negative income (reversal) exports with negative amount`() {
+        val negativeIncome = TransactionRow(
+            uid = "uid_neg_income",
+            epochDay = epochDay2024,
+            amount = -200.0,  // income reversal stored negative in DB
+            description = null,
+            categoryName = "income",
+            isPositive = true
+        )
+        val csv = buildTransactionCsv(listOf(negativeIncome))
+        val lines = csv.trim().lines()
+        assertEquals(2, lines.size)
+        val exportedAmount = parseAmountFromCsvLine(lines[1])
+        assertTrue("Income reversal should export as negative", exportedAmount < 0)
+        assertEquals(-200.0, exportedAmount, 0.001)
+    }
+
+    // An expense refund: DB stores +10.0. Export should show -10.0 (negative expense =
+    // cash inflow / refund). isPositive=false so the sign is flipped on export.
+    @Test
+    fun `expense refund (positive DB) exports with negative amount`() {
+        val refund = TransactionRow(
+            uid = "uid_refund",
+            epochDay = epochDay2024,
+            amount = 10.0,   // refund stored positive in DB
+            description = null,
+            categoryName = "grocery",
+            isPositive = false
+        )
+        val csv = buildTransactionCsv(listOf(refund))
+        val lines = csv.trim().lines()
+        assertEquals(2, lines.size)
+        val exportedAmount = parseAmountFromCsvLine(lines[1])
+        assertTrue("Expense refund should export as negative", exportedAmount < 0)
+        assertEquals(-10.0, exportedAmount, 0.001)
+    }
+
     // The isPositive column must still be present so that import can correctly
-    // route amounts to the right category and recompute the signed value.
+    // route amounts to the right category.
     @Test
     fun `exported CSV includes isPositive column`() {
         val expense = TransactionRow(
@@ -91,36 +131,40 @@ class CsvExportTest {
             csv.trim().lines()[1].endsWith(",false"))
     }
 
-    // The import formula recovers the original amountPositive from the signed CSV amount:
-    //   amountPositive = if (isPositive) csvAmount else -csvAmount
-    // For a normal expense (stored negative), this correctly yields a positive amountPositive.
+    // The import formula is amountPositive = csvAmount (no transformation).
+    // importTransaction then applies the category sign:
+    //   stored = if (isPositive) amountPositive else -amountPositive
+    // For a normal expense (DB = -75.0 → exported as +75.0):
+    //   amountPositive = 75.0 → stored = -75.0 ✓
     @Test
     fun `import formula round-trips a normal expense correctly`() {
-        val originalMagnitude = 75.0
+        val originalDbAmount = -75.0
         val expense = TransactionRow(
             uid = "uid4",
             epochDay = epochDay2024,
-            amount = -originalMagnitude,  // stored negative in DB
+            amount = originalDbAmount,
             description = null,
             categoryName = "grocery",
             isPositive = false
         )
         val csv = buildTransactionCsv(listOf(expense))
         val exportedAmount = parseAmountFromCsvLine(csv.trim().lines()[1])
-        // Import formula: amountPositive = if (isPositive) csvAmount else -csvAmount
-        val recoveredAmountPositive = if (expense.isPositive) exportedAmount else -exportedAmount
-        assertEquals(originalMagnitude, recoveredAmountPositive, 0.001)
+        // Import formula: amountPositive = csvAmount
+        val amountPositive = exportedAmount
+        // importTransaction stores: if (isPositive) amountPositive else -amountPositive
+        val storedAmount = if (expense.isPositive) amountPositive else -amountPositive
+        assertEquals(originalDbAmount, storedAmount, 0.001)
     }
 
-    // Unusual case: negative income (e.g. an income reversal stored as -200 in DB).
-    // The import formula must recover amountPositive = -200 so importTransaction
-    // stores it back as -200 (not flipped to +200 as abs() would do).
+    // For a negative income entry (DB = -200.0 → exported as -200.0):
+    //   amountPositive = -200.0 → stored = if (true) -200.0 = -200.0 ✓
     @Test
     fun `import formula round-trips negative income correctly`() {
+        val originalDbAmount = -200.0
         val negativeIncome = TransactionRow(
             uid = "uid7",
             epochDay = epochDay2024,
-            amount = -200.0,  // unusual: negative income stored in DB
+            amount = originalDbAmount,
             description = null,
             categoryName = "income",
             isPositive = true
@@ -128,17 +172,15 @@ class CsvExportTest {
         val csv = buildTransactionCsv(listOf(negativeIncome))
         val exportedAmount = parseAmountFromCsvLine(csv.trim().lines()[1])
         assertEquals(-200.0, exportedAmount, 0.001)
-        // Import formula: amountPositive = if (isPositive) csvAmount else -csvAmount
-        val recoveredAmountPositive = if (negativeIncome.isPositive) exportedAmount else -exportedAmount
-        // importTransaction stores: if (isPositive) amountPositive else -amountPositive = -200.0
-        val storedAmount = if (negativeIncome.isPositive) recoveredAmountPositive else -recoveredAmountPositive
-        assertEquals(-200.0, storedAmount, 0.001)
+        val amountPositive = exportedAmount
+        val storedAmount = if (negativeIncome.isPositive) amountPositive else -amountPositive
+        assertEquals(originalDbAmount, storedAmount, 0.001)
     }
 
-    // JSON export must also preserve the sign so that the amount field is
-    // informative without requiring callers to cross-reference isPositive.
+    // JSON export must also preserve the user-facing convention.
+    // A normal expense (DB = -42.5) should export as +42.5 in JSON.
     @Test
-    fun `expense transaction JSON exports with negative amount`() {
+    fun `expense transaction JSON exports with positive amount`() {
         val expense = TransactionRow(
             uid = "uid5",
             epochDay = epochDay2024,
@@ -148,9 +190,8 @@ class CsvExportTest {
             isPositive = false
         )
         val json = buildTransactionJson(listOf(expense))
-        // Verify the raw JSON string contains the signed amount
-        assertTrue("JSON export should contain negative amount", json.contains("-42.5"))
-        assertFalse("JSON export should not contain unsigned amount only", json.contains("\"amount\": 42.5"))
+        assertTrue("JSON export should contain positive amount for expense", json.contains("42.5"))
+        assertFalse("JSON export should not contain negative amount for normal expense", json.contains("-42.5"))
     }
 
     // JSON export of income must remain positive.

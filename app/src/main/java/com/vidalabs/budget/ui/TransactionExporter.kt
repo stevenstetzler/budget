@@ -24,8 +24,11 @@ private val prettyJson = Json { prettyPrint = true }
 
 /**
  * Builds a CSV string from [transactions].
- * Amounts are emitted signed (negative for expenses, positive for income)
- * so that polarity is visible directly in the amount column.
+ * Amounts are emitted in the user-facing signed convention:
+ * positive means "in the natural direction of the category"
+ * (positive expense = cash outflow, positive income = cash inflow).
+ * Negative values indicate a reversal (expense refund or income loss).
+ * This is the inverse of the DB-signed value for spending categories.
  */
 internal fun buildTransactionCsv(transactions: List<TransactionRow>): String {
     val sb = StringBuilder()
@@ -33,7 +36,7 @@ internal fun buildTransactionCsv(transactions: List<TransactionRow>): String {
     for (t in transactions) {
         val date = LocalDate.ofEpochDay(t.epochDay).format(DateTimeFormatter.ISO_LOCAL_DATE)
         val category = escapeCsvField(t.categoryName)
-        val amount = t.amount
+        val amount = if (t.isPositive) t.amount else -t.amount
         val description = t.description?.let { escapeCsvField(it) } ?: ""
         sb.appendLine("$date,$category,$amount,$description,${t.isPositive}")
     }
@@ -42,7 +45,7 @@ internal fun buildTransactionCsv(transactions: List<TransactionRow>): String {
 
 /**
  * Builds a pretty-printed JSON string from [transactions].
- * Amounts are emitted signed (negative for expenses, positive for income).
+ * Amounts are emitted in the user-facing signed convention (see [buildTransactionCsv]).
  */
 internal fun buildTransactionJson(transactions: List<TransactionRow>): String {
     val records = transactions.map { t ->
@@ -50,7 +53,7 @@ internal fun buildTransactionJson(transactions: List<TransactionRow>): String {
             date = LocalDate.ofEpochDay(t.epochDay).format(DateTimeFormatter.ISO_LOCAL_DATE),
             category = t.categoryName,
             isPositive = t.isPositive,
-            amount = t.amount,
+            amount = if (t.isPositive) t.amount else -t.amount,
             description = t.description
         )
     }

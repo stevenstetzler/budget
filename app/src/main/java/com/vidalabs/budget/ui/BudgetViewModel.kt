@@ -467,7 +467,7 @@ class BudgetViewModel(
                         date = parseDate(r.date),
                         category = r.category.trim(),
                         isPositive = r.isPositive,
-                        amount = if (r.isPositive) r.amount else -r.amount,
+                        amount = r.amount,
                         description = r.description?.trim()?.takeIf { it.isNotEmpty() }
                     )
                 )
@@ -506,7 +506,7 @@ class BudgetViewModel(
                 val amountText = parts.getOrElse(amountIdx) { "" }
                 val csvAmount = parseAmount(amountText)
                     ?: throw IllegalArgumentException("invalid amount: '$amountText'")
-                val amount = if (isPositive) csvAmount else -csvAmount
+                val amount = csvAmount
                 val description = if (descriptionIdx >= 0) {
                     parts.getOrNull(descriptionIdx)?.takeIf { it.isNotBlank() }
                 } else null
