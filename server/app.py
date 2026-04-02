@@ -55,7 +55,7 @@ def close_connection(exception):
 
 
 def init_db():
-    """Create tables and seed default categories if this is a fresh database."""
+    """Create tables if this is a fresh database."""
     with app.app_context():
         db = get_db()
         db.executescript(
@@ -90,27 +90,6 @@ def init_db():
             );
             """
         )
-
-        # Seed default categories only when the table is empty
-        count = db.execute("SELECT COUNT(*) FROM categories").fetchone()[0]
-        if count == 0:
-            now = _now_ms()
-            income_cats = ["income", "paycheck"]
-            expense_cats = [
-                "taxes", "withholding", "grocery", "dining", "debt",
-                "utilities", "car", "travel", "health", "subscriptions",
-                "housing", "shopping", "charity", "misc", "entertainment",
-            ]
-            for name in income_cats:
-                db.execute(
-                    "INSERT INTO categories VALUES (?,?,?,?,?)",
-                    (str(uuid.uuid4()), name, 1, now, 0),
-                )
-            for name in expense_cats:
-                db.execute(
-                    "INSERT INTO categories VALUES (?,?,?,?,?)",
-                    (str(uuid.uuid4()), name, 0, now, 0),
-                )
         db.commit()
 
 

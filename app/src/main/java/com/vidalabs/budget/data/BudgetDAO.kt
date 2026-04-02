@@ -148,25 +148,6 @@ interface BudgetDao {
     @Query("SELECT * FROM categories WHERE name = :name AND deleted = 0 LIMIT 1")
     suspend fun getCategoryByName(name: String): CategoryEntity?
 
-    @Transaction
-    suspend fun ensureDefaultCategories(defaults: List<com.vidalabs.budget.data.DefaultCategory>) {
-        if (categoryCount() > 0) return
-
-        val now = System.currentTimeMillis()
-        defaults.forEach { d ->
-            insertCategory(
-                CategoryEntity(
-                    uid = UUID.randomUUID().toString(),
-                    name = d.name.trim(),
-                    isPositive = d.isPositive,
-                    updatedAt = now,
-                    deleted = false
-                )
-            )
-        }
-    }
-
-
     // --- Categories
     @Query("SELECT * FROM categories WHERE deleted = 0 ORDER BY isPositive DESC, name COLLATE NOCASE ASC")
     fun observeCategories(): Flow<List<CategoryEntity>>

@@ -24,7 +24,7 @@ import com.vidalabs.budget.data.TransactionRow
 
 data class EntryUiState(
     val date: LocalDate = LocalDate.now(),
-    val category: String = "grocery",
+    val category: String = "",
     val amountText: String = "",
     val description: String = "",
     val error: String? = null
@@ -55,12 +55,6 @@ class BudgetViewModel(
     private val repo: BudgetRepository,
     private val sync: com.vidalabs.budget.sync.SyncManager
 ) : ViewModel() {
-    init {
-        viewModelScope.launch {
-            repo.ensureDefaults()
-        }
-    }
-
     private val _selectedMonth = MutableStateFlow(YearMonth.now())
     val selectedMonth: StateFlow<YearMonth> = _selectedMonth.asStateFlow()
 
