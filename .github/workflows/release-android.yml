@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write  # required to create GitHub Releases and upload assets
+  id-token: write  # required to request an OIDC token for Workload Identity Federation
 
 jobs:
   release:
@@ -59,10 +60,17 @@ jobs:
             app/build/outputs/bundle/release/*.aab
             app/build/outputs/apk/release/*.apk
 
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
       - name: Upload AAB to Google Play Internal Testing
         uses: r0adkll/upload-google-play@v1
         with:
-          serviceAccountJsonPlainText: ${{ secrets.GPLAY_SERVICE_ACCOUNT_JSON }}
+          serviceAccountJson: ${{ steps.auth.outputs.credentials_file_path }}
           packageName: com.vidalabs.budget
           releaseFiles: app/build/outputs/bundle/release/*.aab
           track: internal

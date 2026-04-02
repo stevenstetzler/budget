@@ -10,6 +10,8 @@ Releases are fully automated via the [`release-android.yml`](../.github/workflow
 2. Creates a GitHub Release for the tag and attaches both artifacts.
 3. Uploads the signed AAB to the **Internal Testing** track on Google Play.
 
+Google Play authentication uses **Workload Identity Federation (WIF)**, which does not require storing a long-lived service account JSON key as a secret.
+
 ---
 
 ## Required GitHub Secrets
@@ -22,7 +24,8 @@ All secrets must be added in the repository's **Settings → Secrets and variabl
 | `ANDROID_KEYSTORE_PASSWORD` | Password for the keystore file. |
 | `ANDROID_KEY_ALIAS` | Alias of the signing key inside the keystore. |
 | `ANDROID_KEY_PASSWORD` | Password for the signing key. |
-| `GPLAY_SERVICE_ACCOUNT_JSON` | Full JSON contents of a Google Play service account key that has the **Release Manager** role (or equivalent) in Google Play Console. |
+| `GCP_WIF_PROVIDER` | Full resource name of the Workload Identity Provider (see setup below). |
+| `GCP_SERVICE_ACCOUNT` | Email address of the Google Cloud service account used to publish to Google Play. |
 
 ---
 
@@ -44,22 +47,89 @@ Keep this file **secret and backed up**. Losing it means you cannot update the a
 ### 2. Base64-encode the keystore and save as a secret
 
 ```bash
-base64 -w 0 release.jks | pbcopy   # macOS – copies to clipboard
-# or on Linux:
-base64 -w 0 release.jks
+base64 -w 0 release.jks   # Linux
+base64 release.jks         # macOS
 ```
 
 Paste the output as the `ANDROID_KEYSTORE_BASE64` secret.
 
-### 3. Create a Google Play service account
+### 3. Set up Google Play API access and a service account
 
-1. Open [Google Play Console](https://play.google.com/console) → **Setup → API access**.
-2. Link to a Google Cloud project (or create one).
-3. Create a **Service Account** with the **Release Manager** role in Play Console.
-4. Download the service account's JSON key.
-5. Paste the **entire JSON contents** as the `GPLAY_SERVICE_ACCOUNT_JSON` secret.
+Google Play publishing requires a service account that has been granted access in **Google Play Console**.
 
-### 4. Ensure the app is already created in Google Play Console
+#### a. Enable the Google Play Android Developer API
+
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/) and select (or create) a project.
+2. Open **APIs & Services → Library**, search for **Google Play Android Developer API**, and click **Enable**.
+
+#### b. Create a service account
+
+1. In the same project, go to **IAM & Admin → Service Accounts**.
+2. Click **Create Service Account**, give it a name (e.g. `github-play-publisher`), and click **Create and Continue**.
+3. Skip optional role/user access steps on this screen — permissions are granted in Play Console, not here.
+4. Click **Done**. Note the service account's email address (e.g. `github-play-publisher@my-project.iam.gserviceaccount.com`). Save this as the `GCP_SERVICE_ACCOUNT` secret.
+
+#### c. Grant the service account access in Google Play Console
+
+1. Open [Google Play Console](https://play.google.com/console) → **Users and permissions**.
+2. Click **Invite new users**, enter the service account email from step b, and assign the **Release manager** permission (or a custom permission set that includes *Manage production releases* / *Manage testing track releases*).
+3. Click **Send invitation** → **Apply**.
+
+### 4. Set up Workload Identity Federation (WIF)
+
+WIF lets GitHub Actions authenticate as the service account without storing a long-lived JSON key.
+
+#### a. Create a Workload Identity Pool
+
+```bash
+gcloud iam workload-identity-pools create "github-pool" \
+  --project="PROJECT_ID" \
+  --location="global" \
+  --display-name="GitHub Actions pool"
+```
+
+#### b. Create a Workload Identity Provider in that pool
+
+```bash
+gcloud iam workload-identity-pools providers create-oidc "github-provider" \
+  --project="PROJECT_ID" \
+  --location="global" \
+  --workload-identity-pool="github-pool" \
+  --display-name="GitHub provider" \
+  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.actor=assertion.actor" \
+  --issuer-uri="https://token.actions.githubusercontent.com"
+```
+
+#### c. Allow the GitHub repository to impersonate the service account
+
+```bash
+gcloud iam service-accounts add-iam-policy-binding \
+  "github-play-publisher@PROJECT_ID.iam.gserviceaccount.com" \
+  --project="PROJECT_ID" \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="principalSet://iam.googleapis.com/projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github-pool/attribute.repository/stevenstetzler/budget"
+```
+
+Replace `PROJECT_ID` with your Google Cloud project ID and `PROJECT_NUMBER` with its numeric project number (visible on the project dashboard).
+
+#### d. Save the provider resource name as a secret
+
+```bash
+gcloud iam workload-identity-pools providers describe "github-provider" \
+  --project="PROJECT_ID" \
+  --location="global" \
+  --workload-identity-pool="github-pool" \
+  --format="value(name)"
+```
+
+The output looks like:
+```
+projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+```
+
+Save this as the `GCP_WIF_PROVIDER` secret.
+
+### 5. Ensure the app is already created in Google Play Console
 
 The workflow uploads to an **existing** app listing (`com.vidalabs.budget`). The app must have at least one previous upload (even a draft) before automated uploads work.
 
@@ -102,3 +172,4 @@ export ANDROID_KEY_PASSWORD=your_key_password
 
 ./gradlew bundleRelease assembleRelease
 ```
+
