@@ -68,7 +68,8 @@ def parse_receipts(file_path):
 
     return pd.DataFrame(all_data)
 
-# Usage
-result_df = parse_receipts('/Users/steven/Downloads/Budget (1).xlsx')
-print(result_df.head())
-result_df.to_csv('cleaned_receipts.csv', index=False)
+if __name__ == "__main__":
+    # Usage
+    result_df = parse_receipts('/Users/steven/Downloads/Budget (1).xlsx')
+    print(result_df.head())
+    result_df.to_csv('cleaned_receipts.csv', index=False)
