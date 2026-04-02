@@ -97,6 +97,7 @@ gcloud iam workload-identity-pools providers create-oidc "github-provider" \
   --workload-identity-pool="github-pool" \
   --display-name="GitHub provider" \
   --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.actor=assertion.actor" \
+  --attribute-condition="attribute.repository == 'stevenstetzler/budget'" \
   --issuer-uri="https://token.actions.githubusercontent.com"
 ```
 
