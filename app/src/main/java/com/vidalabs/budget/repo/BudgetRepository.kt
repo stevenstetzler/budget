@@ -1,7 +1,6 @@
 package com.vidalabs.budget.repo
 
 import com.vidalabs.budget.data.BudgetDao
-import com.vidalabs.budget.data.DEFAULT_CATEGORIES
 import com.vidalabs.budget.data.ReceiptEntity
 import kotlinx.coroutines.flow.Flow
 import com.vidalabs.budget.data.CategoryEntity
@@ -45,10 +44,6 @@ class BudgetRepository(private val dao: BudgetDao) {
 
     fun observeSummaryBudgetRowsForMonth(monthKey: Int, startEpochDay: Long, endEpochDay: Long) =
         dao.observeSummaryBudgetRowsForMonth(monthKey, startEpochDay, endEpochDay)
-
-    suspend fun ensureDefaults() {
-        dao.ensureDefaultCategories(DEFAULT_CATEGORIES)
-    }
 
     suspend fun createCategory(name: String, isPositive: Boolean): CategoryEntity {
         val now = System.currentTimeMillis()
