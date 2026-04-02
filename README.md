@@ -125,3 +125,7 @@ Open the project in Android Studio and run it on a device or emulator, or instal
 ```bash
 adb install app/build/outputs/apk/debug/app-debug.apk
 ```
+
+### Releasing
+
+Signed release builds (AAB + APK) are published automatically to GitHub Releases and Google Play Internal Testing when a version tag is pushed.  See [`docs/releasing.md`](docs/releasing.md) for the full process and required secrets.
