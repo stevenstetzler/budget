@@ -12,8 +12,7 @@ permissions:
 jobs:
   release:
     name: Build & Publish
-    runs-on: ubuntu-latest
-
+    runs-on: ubuntu-latest    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -32,12 +31,27 @@ jobs:
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "${{ github.workspace }}/keystore.jks"
 
-      - name: Set Android Version
-        uses: chkfung/android-version-actions@v1.2.1
-        with:
-          gradlePath: app/build.gradle
-          versionCode: ${{ github.run_number }}
+      - name: Bump Android version (Gradle Kotlin DSL)
+        shell: bash
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          VERSION_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          FILE="app/build.gradle.kts"
+          test -f "$FILE" || (echo "Missing $FILE" && exit 1)
 
+          : "${VERSION_CODE:?VERSION_CODE is required}"
+          : "${VERSION_NAME:?VERSION_NAME is required}"
+          
+          VERSION_NAME="${VERSION_NAME#v}"
+          
+          sed -i -E "s/(versionCode\s*=\s*)[0-9]+/\1${VERSION_CODE}/" "$FILE"
+          sed -i -E "s/(versionName\s*=\s*\")[^\"]*(\")/\1${VERSION_NAME}\2/" "$FILE"
+      
+          echo "Updated version fields:"
+          grep -nE "versionCode|versionName" "$FILE"
+        
       - name: Build release AAB and APK
         env:
           ANDROID_KEYSTORE_PATH: ${{ github.workspace }}/keystore.jks
@@ -50,13 +64,6 @@ jobs:
         run: |
           ls -la app/build/outputs/bundle/release/*.aab
           ls -la app/build/outputs/apk/release/*.apk
-
-      - name: Create GitHub Release and upload artifacts
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            app/build/outputs/bundle/release/*.aab
-            app/build/outputs/apk/release/*.apk
 
       - name: Authenticate to Google Cloud (Workload Identity Federation)
         id: auth
@@ -72,6 +79,13 @@ jobs:
           packageName: com.vidalabs.budget
           releaseFiles: app/build/outputs/bundle/release/*.aab
           track: internal
+
+      - name: Create GitHub Release and upload artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            app/build/outputs/bundle/release/*.aab
+            app/build/outputs/apk/release/*.apk
 
       - name: Clean up keystore
         if: always()
