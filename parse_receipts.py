@@ -1,3 +1,4 @@
+import argparse
 import pandas as pd
 import re
 
@@ -69,7 +70,12 @@ def parse_receipts(file_path):
     return pd.DataFrame(all_data)
 
 if __name__ == "__main__":
-    # Usage
-    result_df = parse_receipts('/Users/steven/Downloads/Budget (1).xlsx')
+    parser = argparse.ArgumentParser(description="Parse a budget Excel file into a cleaned CSV.")
+    parser.add_argument("input", help="Path to the budget Excel file (e.g. Budget.xlsx)")
+    parser.add_argument("-o", "--output", default="cleaned_receipts.csv",
+                        help="Output CSV file path (default: cleaned_receipts.csv)")
+    args = parser.parse_args()
+
+    result_df = parse_receipts(args.input)
     print(result_df.head())
-    result_df.to_csv('cleaned_receipts.csv', index=False)
+    result_df.to_csv(args.output, index=False)

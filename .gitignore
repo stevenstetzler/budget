@@ -21,6 +21,14 @@ __pycache__/
 *.egg-info/
 .venv/
 
+# --- PERSONAL FINANCE / DATA EXPORTS ---
+*.csv
+*.xlsx
+*.xls
+*.db-wal
+*.db-shm
+exports/
+
 # --- THE "INCLUDE" SECTION (Whitelisting) ---
 # We ignore the entire gradle wrapper folder to be safe...
 gradle/wrapper/*
