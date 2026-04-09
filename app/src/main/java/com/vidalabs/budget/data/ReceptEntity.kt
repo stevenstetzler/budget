@@ -9,7 +9,8 @@ import androidx.room.PrimaryKey
     indices = [
         Index(value = ["uid"], unique = true),
         Index("epochDay"),
-        Index("categoryUid")
+        Index("categoryUid"),
+        Index("recurrenceId")
     ]
 )
 data class ReceiptEntity(
@@ -19,5 +20,6 @@ data class ReceiptEntity(
     val description: String?,
     val categoryUid: String,         // FK-by-uid (not enforced by Room unless you add FK)
     val updatedAt: Long,
-    val deleted: Boolean = false
+    val deleted: Boolean = false,
+    val recurrenceId: String? = null // FK to recurrence.id; null = not recurring
 )

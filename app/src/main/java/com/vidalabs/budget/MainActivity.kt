@@ -6,12 +6,16 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import androidx.room.Room
 import com.vidalabs.budget.data.AppDatabase
+import com.vidalabs.budget.data.MIGRATION_11_12
 import com.vidalabs.budget.repo.BudgetRepository
 import com.vidalabs.budget.ui.BudgetApp
 import com.vidalabs.budget.ui.BudgetViewModel
 import com.vidalabs.budget.ui.theme.Budgetp2pTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -22,11 +26,19 @@ class MainActivity : ComponentActivity() {
             applicationContext,
             AppDatabase::class.java,
             "budgetp2p.db"
-        ).fallbackToDestructiveMigration().build()
+        )
+            .addMigrations(MIGRATION_11_12)
+            .fallbackToDestructiveMigration()
+            .build()
 
         val repo = BudgetRepository(db.dao())
 
         val syncManager = com.vidalabs.budget.sync.SyncManager(applicationContext, db)
+
+        // On startup: populate validity_lookup 12 months ahead for all existing recurrences
+        lifecycleScope.launch(Dispatchers.IO) {
+            repo.populateValidityLookup()
+        }
 
         val vm = ViewModelProvider(
             this,
