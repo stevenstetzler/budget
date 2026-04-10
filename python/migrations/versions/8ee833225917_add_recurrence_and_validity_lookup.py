@@ -26,18 +26,22 @@ def upgrade() -> None:
     here are guarded with ``if_not_exists=True`` / ``checkfirst=True``.
     For existing databases this migration:
 
-    1. Adds the nullable ``recurrenceId`` column to ``receipts``.
+    1. Adds the nullable ``recurrenceId`` column to ``receipts`` (guarded:
+       skipped if the column already exists, e.g. when create_all ran first).
     2. Creates the ``recurrence`` table.
     3. Creates the ``validity_lookup`` table.
     """
     # 1. Add recurrenceId to receipts (nullable, default NULL)
-    #    op.add_column is a no-op if the column already exists only when the
-    #    underlying dialect supports it; SQLite does not raise on duplicate
-    #    column additions in newer versions, but we guard with a try/except.
-    with op.batch_alter_table('receipts') as batch_op:
-        batch_op.add_column(
-            sa.Column('recurrenceId', sa.String(), nullable=True, index=True)
-        )
+    #    Guard against duplicate-column error on fresh DBs where create_all
+    #    already created the column.
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    existing_columns = [c['name'] for c in inspector.get_columns('receipts')]
+    if 'recurrenceId' not in existing_columns:
+        with op.batch_alter_table('receipts') as batch_op:
+            batch_op.add_column(
+                sa.Column('recurrenceId', sa.String(), nullable=True, index=True)
+            )
 
     # 2. Create the recurrence table
     op.create_table(

@@ -250,7 +250,7 @@ interface BudgetDao {
     UNION ALL
     SELECT
         r.uid AS uid,
-        r.epochDay AS epochDay,
+        vl.targetMonth AS epochDay,
         r.amount AS amount,
         r.description AS description
     FROM receipts r
@@ -289,7 +289,7 @@ interface BudgetDao {
     UNION ALL
     SELECT
         r.uid AS uid,
-        r.epochDay AS epochDay,
+        vl.targetMonth AS epochDay,
         r.amount AS amount,
         r.description AS description,
         c.name AS categoryName,
@@ -374,6 +374,9 @@ interface BudgetDao {
 
     @Query("DELETE FROM validity_lookup WHERE recurrenceId = :recurrenceId")
     suspend fun deleteValidityLookupForRecurrence(recurrenceId: String)
+
+    @Query("DELETE FROM validity_lookup WHERE id = :id")
+    suspend fun deleteValidityLookupById(id: String)
 
     @Query(
         """

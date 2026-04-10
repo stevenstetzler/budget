@@ -169,6 +169,8 @@ class BudgetRepository(private val dao: BudgetDao) {
     /**
      * Create or update a recurrence for a receipt. Automatically populates
      * validity_lookup for the next [VALIDITY_LOOKAHEAD_MONTHS] months.
+     * When updating an existing recurrence, stale validity_lookup rows that no
+     * longer fall within the active range are pruned first.
      */
     suspend fun upsertRecurrence(
         receiptId: String,
@@ -195,7 +197,13 @@ class BudgetRepository(private val dao: BudgetDao) {
             dao.upsertReceipt(receipt.copy(recurrenceId = id))
         }
 
-        // Populate validity_lookup
+        // When updating an existing recurrence, prune validity_lookup rows that
+        // are no longer valid (e.g. outside new startDate/endDate or frequency change)
+        if (existingId != null) {
+            pruneValidityLookupForRecurrence(rec)
+        }
+
+        // Populate any missing validity_lookup rows
         populateValidityLookupForRecurrence(rec)
         return rec
     }
@@ -263,6 +271,28 @@ class BudgetRepository(private val dao: BudgetDao) {
     // -------------------------------------------------------------------------
     // Internal helpers
     // -------------------------------------------------------------------------
+
+    /**
+     * Remove validity_lookup rows for [rec] that are no longer valid.
+     *
+     * This covers months that fall:
+     * - Before the recurrence's startDate.
+     * - After the recurrence's endDate (if one is set).
+     * - In months where the recurrence no longer has an occurrence (e.g. after a
+     *   frequency change).
+     *
+     * User-set isActive=false overrides for months that ARE still active are left
+     * untouched.
+     */
+    private suspend fun pruneValidityLookupForRecurrence(rec: RecurrenceEntity) {
+        val entries = dao.getValidityLookupForRecurrence(rec.id)
+        for (entry in entries) {
+            val targetDate = LocalDate.ofEpochDay(entry.targetMonth)
+            if (!isRecurrenceActiveInMonth(rec, targetDate.year, targetDate.monthValue)) {
+                dao.deleteValidityLookupById(entry.id)
+            }
+        }
+    }
 
     private suspend fun populateValidityLookupForRecurrence(rec: RecurrenceEntity) {
         val today = LocalDate.now()

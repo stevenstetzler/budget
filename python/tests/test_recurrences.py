@@ -18,7 +18,6 @@ import pytest
 CATEGORY_UID = "test-cat-recur-001"
 RECEIPT_UID = "test-receipt-recur-001"
 
-# Epoch day for 2026-01-01 (reference date)
 _EPOCH = date(1970, 1, 1)
 
 
@@ -26,10 +25,28 @@ def _epoch_day(d: date) -> int:
     return (d - _EPOCH).days
 
 
-MONTH_JAN_2026 = _epoch_day(date(2026, 1, 1))   # 2026-01-01 epoch day
-MONTH_FEB_2026 = _epoch_day(date(2026, 2, 1))   # 2026-02-01 epoch day
+def _first_of_next_month(d: date) -> date:
+    """Return the first day of the month following *d*."""
+    if d.month == 12:
+        return date(d.year + 1, 1, 1)
+    return date(d.year, d.month + 1, 1)
 
-RECEIPT_EPOCH_DAY = _epoch_day(date(2026, 1, 15))
+
+# Use months relative to today so validity_lookup is always within the
+# 12-month lookahead window, regardless of when the tests are executed.
+_today = date.today()
+# MONTH_START: first day of next month  (always within lookahead)
+_MONTH_START_DATE = _first_of_next_month(_today)
+# MONTH_NEXT: first day of the month after MONTH_START
+_MONTH_NEXT_DATE = _first_of_next_month(_MONTH_START_DATE)
+
+MONTH_START = _epoch_day(_MONTH_START_DATE)
+MONTH_NEXT = _epoch_day(_MONTH_NEXT_DATE)
+
+# Receipt falls in MONTH_START (day 15, or last day if month has < 15 days)
+import calendar as _calendar
+_receipt_day = min(15, _calendar.monthrange(_MONTH_START_DATE.year, _MONTH_START_DATE.month)[1])
+RECEIPT_EPOCH_DAY = _epoch_day(date(_MONTH_START_DATE.year, _MONTH_START_DATE.month, _receipt_day))
 
 
 @pytest.fixture(autouse=True)
@@ -71,7 +88,7 @@ def test_post_recurrence_creates_validity_lookup(client):
         "id": rec_id,
         "receiptId": RECEIPT_UID,
         "frequency": "MONTHLY",
-        "startDate": MONTH_JAN_2026,
+        "startDate": MONTH_START,
         "endDate": None,
         "dayOfPeriod": 15,
     }
@@ -86,10 +103,10 @@ def test_post_recurrence_creates_validity_lookup(client):
     assert vl_resp.status_code == 200
     entries = vl_resp.json()
     assert len(entries) >= 1
-    # Jan 2026 should be active
-    jan_entries = [e for e in entries if e["targetMonth"] == MONTH_JAN_2026]
-    assert len(jan_entries) == 1
-    assert jan_entries[0]["isActive"] is True
+    # MONTH_START should be active
+    start_entries = [e for e in entries if e["targetMonth"] == MONTH_START]
+    assert len(start_entries) == 1
+    assert start_entries[0]["isActive"] is True
 
     # Clean up
     client.delete(f"/recurrences/{rec_id}")
@@ -104,7 +121,7 @@ def test_get_recurrences(client):
             "id": rec_id,
             "receiptId": RECEIPT_UID,
             "frequency": "MONTHLY",
-            "startDate": MONTH_JAN_2026,
+            "startDate": MONTH_START,
             "endDate": None,
             "dayOfPeriod": 1,
         },
@@ -131,26 +148,26 @@ def test_toggle_validity_lookup_inactive(client):
             "id": rec_id,
             "receiptId": RECEIPT_UID,
             "frequency": "MONTHLY",
-            "startDate": MONTH_JAN_2026,
+            "startDate": MONTH_START,
             "endDate": None,
             "dayOfPeriod": 15,
         },
     )
 
-    # Find the validity_lookup entry for Jan 2026
+    # Find the validity_lookup entry for MONTH_START
     vl_entries = client.get(f"/validity-lookup/recurrence/{rec_id}").json()
-    jan_entry = next(e for e in vl_entries if e["targetMonth"] == MONTH_JAN_2026)
+    start_entry = next(e for e in vl_entries if e["targetMonth"] == MONTH_START)
 
     # Toggle off
     patch_resp = client.patch(
-        f"/validity-lookup/{jan_entry['id']}", json={"isActive": False}
+        f"/validity-lookup/{start_entry['id']}", json={"isActive": False}
     )
     assert patch_resp.status_code == 200
     assert patch_resp.json()["isActive"] is False
 
     # Toggle back on
     patch_resp2 = client.patch(
-        f"/validity-lookup/{jan_entry['id']}", json={"isActive": True}
+        f"/validity-lookup/{start_entry['id']}", json={"isActive": True}
     )
     assert patch_resp2.status_code == 200
     assert patch_resp2.json()["isActive"] is True
@@ -166,24 +183,28 @@ def test_toggle_validity_lookup_inactive(client):
 def test_receipts_for_target_month_includes_recurring(client):
     """GET /receipts/?targetMonth=... includes active recurring receipts."""
     rec_id = str(uuid.uuid4())
-    # Create monthly recurrence starting Jan 2026
+    # Create monthly recurrence starting at MONTH_START
     client.post(
         "/recurrences/",
         json={
             "id": rec_id,
             "receiptId": RECEIPT_UID,
             "frequency": "MONTHLY",
-            "startDate": MONTH_JAN_2026,
+            "startDate": MONTH_START,
             "endDate": None,
             "dayOfPeriod": 15,
         },
     )
 
-    # Feb 2026 has no regular receipt but the recurrence should include it
-    resp = client.get(f"/receipts/?targetMonth={MONTH_FEB_2026}")
+    # MONTH_NEXT has no regular receipt but the recurrence should include it
+    resp = client.get(f"/receipts/?targetMonth={MONTH_NEXT}")
     assert resp.status_code == 200
-    uids = [r["uid"] for r in resp.json()]
+    result = resp.json()
+    uids = [r["uid"] for r in result]
     assert RECEIPT_UID in uids
+    # Recurring receipt should have occurrenceEpochDay set to the target month
+    receipt_data = next(r for r in result if r["uid"] == RECEIPT_UID)
+    assert receipt_data["occurrenceEpochDay"] == MONTH_NEXT
 
     client.delete(f"/recurrences/{rec_id}")
 
@@ -197,22 +218,26 @@ def test_receipts_for_target_month_excludes_inactive_recurring(client):
             "id": rec_id,
             "receiptId": RECEIPT_UID,
             "frequency": "MONTHLY",
-            "startDate": MONTH_JAN_2026,
+            "startDate": MONTH_START,
             "endDate": None,
             "dayOfPeriod": 15,
         },
     )
 
-    # Disable the Feb 2026 entry
+    # Disable the MONTH_NEXT entry
     vl_entries = client.get(f"/validity-lookup/recurrence/{rec_id}").json()
-    feb_entry = next(
-        (e for e in vl_entries if e["targetMonth"] == MONTH_FEB_2026), None
+    next_entry = next(
+        (e for e in vl_entries if e["targetMonth"] == MONTH_NEXT), None
     )
-    if feb_entry:
-        client.patch(f"/validity-lookup/{feb_entry['id']}", json={"isActive": False})
+    # The entry MUST exist for this test to be meaningful
+    assert next_entry is not None, (
+        f"Expected a validity_lookup entry for MONTH_NEXT ({MONTH_NEXT}); "
+        f"found entries: {[e['targetMonth'] for e in vl_entries]}"
+    )
+    client.patch(f"/validity-lookup/{next_entry['id']}", json={"isActive": False})
 
-    # Feb 2026 should NOT include the recurring receipt now
-    resp = client.get(f"/receipts/?targetMonth={MONTH_FEB_2026}")
+    # MONTH_NEXT should NOT include the recurring receipt now
+    resp = client.get(f"/receipts/?targetMonth={MONTH_NEXT}")
     assert resp.status_code == 200
     uids = [r["uid"] for r in resp.json()]
     assert RECEIPT_UID not in uids
@@ -234,7 +259,7 @@ def test_delete_recurrence_clears_validity_lookup(client):
             "id": rec_id,
             "receiptId": RECEIPT_UID,
             "frequency": "MONTHLY",
-            "startDate": MONTH_JAN_2026,
+            "startDate": MONTH_START,
             "endDate": None,
             "dayOfPeriod": 1,
         },

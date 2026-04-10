@@ -2,7 +2,6 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
 
 import models
 import schemas
@@ -25,6 +24,10 @@ def list_receipts(
     - With startEpochDay + endEpochDay: returns receipts in that date range.
     - With targetMonth (epochDay of first day of month): returns receipts for that
       month, including recurring receipts whose validity_lookup entry is active.
+      Regular (non-recurring) receipts are only included when their epochDay falls
+      within the date range for that month.  Recurring receipts are included solely
+      via the validity_lookup join and have their occurrenceEpochDay set to
+      targetMonth (the first day of the target month).
       Combining targetMonth with startEpochDay/endEpochDay restricts further.
     """
     if target_month is not None:
@@ -41,12 +44,13 @@ def list_receipts(
                 next_month_first = date(base.year, base.month + 1, 1)
             end_epoch_day = (next_month_first - date(1970, 1, 1)).days
 
-        # Receipts that fall in the date range (regular)
+        # Regular (non-recurring) receipts that fall in the date range
         regular_uids = {
             r.uid
             for r in db.query(models.Receipt.uid)
             .filter(
                 models.Receipt.deleted == False,  # noqa: E712
+                models.Receipt.recurrenceId == None,  # noqa: E711
                 models.Receipt.epochDay >= start_epoch_day,
                 models.Receipt.epochDay < end_epoch_day,
             )
@@ -72,7 +76,7 @@ def list_receipts(
         if not all_uids:
             return []
 
-        return (
+        receipts = (
             db.query(models.Receipt)
             .filter(
                 models.Receipt.uid.in_(all_uids),
@@ -80,6 +84,16 @@ def list_receipts(
             )
             .all()
         )
+
+        # Build response: recurring receipts get occurrenceEpochDay = target_month
+        # so clients always receive an in-range date for display/ordering.
+        responses = []
+        for r in receipts:
+            resp = schemas.ReceiptResponse.model_validate(r)
+            if r.uid in recurring_uids:
+                resp.occurrenceEpochDay = target_month
+            responses.append(resp)
+        return responses
 
     # Plain date-range filter (no recurring lookup)
     query = db.query(models.Receipt).filter(models.Receipt.deleted == False)  # noqa: E712

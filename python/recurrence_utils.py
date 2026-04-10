@@ -92,10 +92,39 @@ def _has_occurrence_in_month(
     return next_occ < month_end_exclusive
 
 
+def prune_validity_lookup_for_recurrence(
+    db: Session,
+    recurrence: models.Recurrence,
+) -> None:
+    """
+    Remove validity_lookup rows that are no longer valid for the given recurrence.
+
+    This covers:
+    - Months before the recurrence's startDate.
+    - Months after the recurrence's endDate (if set).
+    - Months where the recurrence no longer produces an occurrence (e.g., after a
+      frequency change).
+
+    Rows whose month is still active are left untouched so that any user-set
+    ``isActive=False`` overrides are preserved.
+    """
+    entries = (
+        db.query(models.ValidityLookup)
+        .filter(models.ValidityLookup.recurrenceId == recurrence.id)
+        .all()
+    )
+    for entry in entries:
+        target = _from_epoch_day(entry.targetMonth)
+        if not _recurrence_active_in_month(recurrence, target.year, target.month):
+            db.delete(entry)
+    db.commit()
+
+
 def populate_validity_lookup_for_recurrence(
     db: Session,
     recurrence: models.Recurrence,
     lookahead_months: int = VALIDITY_LOOKAHEAD_MONTHS,
+    prune_stale: bool = False,
 ) -> None:
     """
     Pre-populate validity_lookup for the given recurrence covering the period from
@@ -103,7 +132,14 @@ def populate_validity_lookup_for_recurrence(
 
     Existing rows are preserved (their isActive values are not reset); only missing
     rows are inserted.
+
+    When *prune_stale* is True (set on recurrence updates), stale rows that no
+    longer correspond to an active month are removed first, so that edited
+    recurrences don't keep appearing in months they should have left.
     """
+    if prune_stale:
+        prune_validity_lookup_for_recurrence(db, recurrence)
+
     today = date.today()
     # Start from the month of the recurrence's start date
     start_date = _from_epoch_day(recurrence.startDate)

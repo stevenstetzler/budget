@@ -34,6 +34,9 @@ class ReceiptCreate(ReceiptBase):
 
 
 class ReceiptResponse(ReceiptBase):
+    # Set for recurring receipts returned by a targetMonth query; indicates the
+    # computed occurrence date within the requested month (not the base receipt date).
+    occurrenceEpochDay: Optional[int] = None
     model_config = {"from_attributes": True}
 
 

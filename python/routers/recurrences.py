@@ -40,13 +40,41 @@ def upsert_recurrence(recurrence: schemas.RecurrenceCreate, db: Session = Depend
         # Pre-populate validity_lookup for 12 months
         populate_validity_lookup_for_recurrence(db, db_rec)
     else:
+        old_receipt_id = existing.receiptId
         for key, value in recurrence.model_dump().items():
             setattr(existing, key, value)
+
+        # If receiptId changed, unlink the old receipt and link the new one
+        if old_receipt_id != recurrence.receiptId:
+            old_receipt = (
+                db.query(models.Receipt)
+                .filter(models.Receipt.uid == old_receipt_id)
+                .first()
+            )
+            if old_receipt is not None:
+                old_receipt.recurrenceId = None
+            new_receipt = (
+                db.query(models.Receipt)
+                .filter(models.Receipt.uid == recurrence.receiptId)
+                .first()
+            )
+            if new_receipt is not None:
+                new_receipt.recurrenceId = recurrence.id
+        else:
+            # Ensure the current receipt still has the recurrenceId set (repair if missing)
+            receipt = (
+                db.query(models.Receipt)
+                .filter(models.Receipt.uid == recurrence.receiptId)
+                .first()
+            )
+            if receipt is not None and receipt.recurrenceId != recurrence.id:
+                receipt.recurrenceId = recurrence.id
+
         db.commit()
         db.refresh(existing)
         db_rec = existing
-        # Re-populate validity_lookup after update
-        populate_validity_lookup_for_recurrence(db, db_rec)
+        # Re-populate validity_lookup after update, pruning any stale rows first
+        populate_validity_lookup_for_recurrence(db, db_rec, prune_stale=True)
     return db_rec
 
 
