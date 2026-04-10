@@ -11,7 +11,7 @@ Verifies:
 """
 
 import uuid
-import calendar as _calendar
+import calendar
 from datetime import date, timedelta
 
 import pytest
@@ -44,9 +44,16 @@ _MONTH_NEXT_DATE = _first_of_next_month(_MONTH_START_DATE)
 MONTH_START = _epoch_day(_MONTH_START_DATE)
 MONTH_NEXT = _epoch_day(_MONTH_NEXT_DATE)
 
+
+def _clamped_day_epoch(target_date: date, desired_day: int) -> int:
+    """Return the epoch day for *desired_day* in *target_date*'s month, clamped to the month length."""
+    max_day = calendar.monthrange(target_date.year, target_date.month)[1]
+    actual_day = min(desired_day, max_day)
+    return _epoch_day(date(target_date.year, target_date.month, actual_day))
+
+
 # Receipt falls in MONTH_START (day 15, or last day if month has < 15 days)
-_receipt_day = min(15, _calendar.monthrange(_MONTH_START_DATE.year, _MONTH_START_DATE.month)[1])
-RECEIPT_EPOCH_DAY = _epoch_day(date(_MONTH_START_DATE.year, _MONTH_START_DATE.month, _receipt_day))
+RECEIPT_EPOCH_DAY = _clamped_day_epoch(_MONTH_START_DATE, 15)
 
 
 @pytest.fixture(autouse=True)
@@ -204,8 +211,7 @@ def test_receipts_for_target_month_includes_recurring(client):
     assert RECEIPT_UID in uids
     # Recurring receipt should have occurrenceEpochDay set to the 15th of MONTH_NEXT
     receipt_data = next(r for r in result if r["uid"] == RECEIPT_UID)
-    expected_occ = _epoch_day(date(_MONTH_NEXT_DATE.year, _MONTH_NEXT_DATE.month,
-                                   min(15, _calendar.monthrange(_MONTH_NEXT_DATE.year, _MONTH_NEXT_DATE.month)[1])))
+    expected_occ = _clamped_day_epoch(_MONTH_NEXT_DATE, 15)
     assert receipt_data["occurrenceEpochDay"] == expected_occ
 
     client.delete(f"/recurrences/{rec_id}")

@@ -1,5 +1,6 @@
 from typing import List, Optional
 import calendar
+from datetime import date as _date, timedelta as _td
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -9,6 +10,8 @@ import schemas
 from database import get_db
 
 router = APIRouter(prefix="/receipts", tags=["receipts"])
+
+_EPOCH_ORIGIN = _date(1970, 1, 1)
 
 
 @router.get("/", response_model=List[schemas.ReceiptResponse])
@@ -37,13 +40,12 @@ def list_receipts(
             start_epoch_day = target_month
         if end_epoch_day is None:
             # Compute first day of next month
-            from datetime import date, timedelta
-            base = date(1970, 1, 1) + timedelta(days=target_month)
+            base = _EPOCH_ORIGIN + _td(days=target_month)
             if base.month == 12:
-                next_month_first = date(base.year + 1, 1, 1)
+                next_month_first = _date(base.year + 1, 1, 1)
             else:
-                next_month_first = date(base.year, base.month + 1, 1)
-            end_epoch_day = (next_month_first - date(1970, 1, 1)).days
+                next_month_first = _date(base.year, base.month + 1, 1)
+            end_epoch_day = (next_month_first - _EPOCH_ORIGIN).days
 
         # Regular (non-recurring) receipts that fall in the date range
         regular_uids = {
@@ -95,9 +97,7 @@ def list_receipts(
 
         # Build response: recurring receipts get a computed occurrenceEpochDay so
         # clients always receive an in-range date for display/ordering.
-        from datetime import date as _date, timedelta as _td
-        _epoch_origin = _date(1970, 1, 1)
-        _base = _epoch_origin + _td(days=target_month)  # first day of target month
+        _base = _EPOCH_ORIGIN + _td(days=target_month)  # first day of target month
 
         responses = []
         for r in receipts:
@@ -109,7 +109,7 @@ def list_receipts(
                     max_day = calendar.monthrange(_base.year, _base.month)[1]
                     occ_day = min(day_of_period, max_day)
                     occ_date = _date(_base.year, _base.month, occ_day)
-                    resp.occurrenceEpochDay = (occ_date - _epoch_origin).days
+                    resp.occurrenceEpochDay = (occ_date - _EPOCH_ORIGIN).days
                 else:
                     # For DAILY / WEEKLY / BI_WEEKLY use the start of the target month
                     resp.occurrenceEpochDay = target_month
