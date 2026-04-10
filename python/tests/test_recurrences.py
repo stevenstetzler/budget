@@ -11,6 +11,7 @@ Verifies:
 """
 
 import uuid
+import calendar as _calendar
 from datetime import date, timedelta
 
 import pytest
@@ -44,7 +45,6 @@ MONTH_START = _epoch_day(_MONTH_START_DATE)
 MONTH_NEXT = _epoch_day(_MONTH_NEXT_DATE)
 
 # Receipt falls in MONTH_START (day 15, or last day if month has < 15 days)
-import calendar as _calendar
 _receipt_day = min(15, _calendar.monthrange(_MONTH_START_DATE.year, _MONTH_START_DATE.month)[1])
 RECEIPT_EPOCH_DAY = _epoch_day(date(_MONTH_START_DATE.year, _MONTH_START_DATE.month, _receipt_day))
 
@@ -202,9 +202,11 @@ def test_receipts_for_target_month_includes_recurring(client):
     result = resp.json()
     uids = [r["uid"] for r in result]
     assert RECEIPT_UID in uids
-    # Recurring receipt should have occurrenceEpochDay set to the target month
+    # Recurring receipt should have occurrenceEpochDay set to the 15th of MONTH_NEXT
     receipt_data = next(r for r in result if r["uid"] == RECEIPT_UID)
-    assert receipt_data["occurrenceEpochDay"] == MONTH_NEXT
+    expected_occ = _epoch_day(date(_MONTH_NEXT_DATE.year, _MONTH_NEXT_DATE.month,
+                                   min(15, _calendar.monthrange(_MONTH_NEXT_DATE.year, _MONTH_NEXT_DATE.month)[1])))
+    assert receipt_data["occurrenceEpochDay"] == expected_occ
 
     client.delete(f"/recurrences/{rec_id}")
 
@@ -230,10 +232,7 @@ def test_receipts_for_target_month_excludes_inactive_recurring(client):
         (e for e in vl_entries if e["targetMonth"] == MONTH_NEXT), None
     )
     # The entry MUST exist for this test to be meaningful
-    assert next_entry is not None, (
-        f"Expected a validity_lookup entry for MONTH_NEXT ({MONTH_NEXT}); "
-        f"found entries: {[e['targetMonth'] for e in vl_entries]}"
-    )
+    assert next_entry is not None, f"Expected a validity_lookup entry for MONTH_NEXT ({MONTH_NEXT}); found entries: {[e['targetMonth'] for e in vl_entries]}"
     client.patch(f"/validity-lookup/{next_entry['id']}", json={"isActive": False})
 
     # MONTH_NEXT should NOT include the recurring receipt now

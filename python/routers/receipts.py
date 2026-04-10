@@ -1,4 +1,5 @@
 from typing import List, Optional
+import calendar
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -57,9 +58,14 @@ def list_receipts(
             .all()
         }
 
-        # Recurring receipt UIDs active in the target month
-        recurring_receipt_ids = (
-            db.query(models.Recurrence.receiptId)
+        # Recurring receipt UIDs active in the target month, along with their
+        # recurrence metadata for computing the occurrence date.
+        recurring_rows = (
+            db.query(
+                models.Recurrence.receiptId,
+                models.Recurrence.frequency,
+                models.Recurrence.dayOfPeriod,
+            )
             .join(
                 models.ValidityLookup,
                 models.ValidityLookup.recurrenceId == models.Recurrence.id,
@@ -70,7 +76,9 @@ def list_receipts(
             )
             .all()
         )
-        recurring_uids = {r.receiptId for r in recurring_receipt_ids}
+        # Map receiptId → (frequency, dayOfPeriod) for occurrence-date computation
+        recurring_uid_to_rec = {r.receiptId: (r.frequency, r.dayOfPeriod) for r in recurring_rows}
+        recurring_uids = set(recurring_uid_to_rec.keys())
 
         all_uids = regular_uids | recurring_uids
         if not all_uids:
@@ -85,13 +93,26 @@ def list_receipts(
             .all()
         )
 
-        # Build response: recurring receipts get occurrenceEpochDay = target_month
-        # so clients always receive an in-range date for display/ordering.
+        # Build response: recurring receipts get a computed occurrenceEpochDay so
+        # clients always receive an in-range date for display/ordering.
+        from datetime import date as _date, timedelta as _td
+        _epoch_origin = _date(1970, 1, 1)
+        _base = _epoch_origin + _td(days=target_month)  # first day of target month
+
         responses = []
         for r in receipts:
             resp = schemas.ReceiptResponse.model_validate(r)
-            if r.uid in recurring_uids:
-                resp.occurrenceEpochDay = target_month
+            if r.uid in recurring_uid_to_rec:
+                freq, day_of_period = recurring_uid_to_rec[r.uid]
+                if freq == "MONTHLY":
+                    # Clamp day to the actual length of the target month
+                    max_day = calendar.monthrange(_base.year, _base.month)[1]
+                    occ_day = min(day_of_period, max_day)
+                    occ_date = _date(_base.year, _base.month, occ_day)
+                    resp.occurrenceEpochDay = (occ_date - _epoch_origin).days
+                else:
+                    # For DAILY / WEEKLY / BI_WEEKLY use the start of the target month
+                    resp.occurrenceEpochDay = target_month
             responses.append(resp)
         return responses
 

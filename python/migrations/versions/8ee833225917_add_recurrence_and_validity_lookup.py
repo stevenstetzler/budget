@@ -36,7 +36,7 @@ def upgrade() -> None:
     #    already created the column.
     bind = op.get_bind()
     inspector = sa.inspect(bind)
-    existing_columns = [c['name'] for c in inspector.get_columns('receipts')]
+    existing_columns = {c['name'] for c in inspector.get_columns('receipts')}
     if 'recurrenceId' not in existing_columns:
         with op.batch_alter_table('receipts') as batch_op:
             batch_op.add_column(
