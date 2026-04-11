@@ -150,7 +150,7 @@ def _now_ms() -> int:
 
 
 def _epoch_day_for_month_key(month_key: int) -> tuple[int, int]:
-    """Return (first_epoch_day, next_month_first_epoch_day) for a YYYYMM key."""
+    """Return (first_epoch_day, next_month_first_epoch_day) exclusive upper bound for a YYYYMM key."""
     year = month_key // 100
     month = month_key % 100
     first = date(year, month, 1)
@@ -373,7 +373,7 @@ def create_transaction():
     uid = str(uuid.uuid4())
     now = _now_ms()
     db.execute(
-        "INSERT INTO receipts (uid, epoch_day, amount, description, category_uid, updated_at, deleted) VALUES (?,?,?,?,?,?,?)",
+        "INSERT INTO receipts (uid, epoch_day, amount, description, category_uid, updated_at, deleted, recurrence_id) VALUES (?,?,?,?,?,?,?,NULL)",
         (uid, int(epoch_day), float(amount), description, category_uid, now, 0),
     )
     db.commit()

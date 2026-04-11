@@ -1368,6 +1368,9 @@ function monthKeyToFirstEpochDay(mk) {
 }
 
 function generateUuid() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
     const r = Math.random() * 16 | 0;
     return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
@@ -1413,7 +1416,8 @@ async function openEditModal(txn) {
         document.getElementById('edit-rec-active-month').checked = statusResp.is_active;
       }
     } catch (e) {
-      // Ignore errors loading recurrence; proceed with modal open
+      console.error('Failed to load recurrence for transaction', txn.uid, e);
+      // Proceed with modal open; recurrence features will be unavailable
     }
   }
 
