@@ -7,6 +7,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.pm.PackageInfoCompat
 import com.vidalabs.budget.AppPrefs
 import com.vidalabs.budget.ui.budget.BudgetPane
 import com.vidalabs.budget.ui.entry.EntryPane
@@ -23,8 +24,8 @@ fun BudgetApp(vm: BudgetViewModel, sync: SyncManager, modifier: Modifier = Modif
     val context = LocalContext.current
     val appPrefs = remember { AppPrefs(context) }
     val currentVersionCode = remember {
-        @Suppress("DEPRECATION")
-        context.packageManager.getPackageInfo(context.packageName, 0).versionCode
+        val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+        PackageInfoCompat.getLongVersionCode(packageInfo).toInt()
     }
     val lastSeenVersionCode = remember { appPrefs.getLastSeenVersionCode() }
 

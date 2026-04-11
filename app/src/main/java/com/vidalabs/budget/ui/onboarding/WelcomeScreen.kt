@@ -81,7 +81,7 @@ fun WelcomeScreen(onDismiss: () -> Unit) {
 @Composable
 private fun FeatureList() {
     val features = listOf(
-        "Track expenses and income with customisable categories",
+        "Track expenses and income with customizable categories",
         "Plan your monthly budget and review spending summaries",
         "Sync across devices via a local folder or self-hosted server",
         "Import and export your data as CSV"

@@ -15,7 +15,7 @@ val CHANGELOG: List<ChangelogEntry> = listOf(
         versionName = "1.0",
         versionCode = 1,
         changes = listOf(
-            "Track expenses and income with customisable categories",
+            "Track expenses and income with customizable categories",
             "Monthly budget planning and spending summaries",
             "Sync across devices via a local folder or self-hosted server",
             "Import and export data as CSV"
