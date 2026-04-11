@@ -10,6 +10,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.room.Room
 import com.vidalabs.budget.data.AppDatabase
 import com.vidalabs.budget.data.MIGRATION_11_12
+import com.vidalabs.budget.data.MIGRATION_12_13
 import com.vidalabs.budget.repo.BudgetRepository
 import com.vidalabs.budget.ui.BudgetApp
 import com.vidalabs.budget.ui.BudgetViewModel
@@ -27,7 +28,7 @@ class MainActivity : ComponentActivity() {
             AppDatabase::class.java,
             "budgetp2p.db"
         )
-            .addMigrations(MIGRATION_11_12)
+            .addMigrations(MIGRATION_11_12, MIGRATION_12_13)
             .fallbackToDestructiveMigration()
             .build()
 

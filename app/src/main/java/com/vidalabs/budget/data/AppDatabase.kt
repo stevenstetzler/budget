@@ -52,6 +52,32 @@ val MIGRATION_11_12 = object : Migration(11, 12) {
     }
 }
 
+val MIGRATION_12_13 = object : Migration(12, 13) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // Remove duplicate validity_lookup rows (same recurrenceId + targetMonth).
+        // Keep the row with isActive=0 if any duplicate is inactive (user explicitly
+        // disabled that month), otherwise keep an arbitrary one (MIN by id).
+        db.execSQL(
+            """
+            DELETE FROM validity_lookup
+            WHERE id NOT IN (
+                SELECT CASE
+                    WHEN MIN(CASE WHEN isActive = 0 THEN id ELSE NULL END) IS NOT NULL
+                    THEN MIN(CASE WHEN isActive = 0 THEN id ELSE NULL END)
+                    ELSE MIN(id)
+                END
+                FROM validity_lookup
+                GROUP BY recurrenceId, targetMonth
+            )
+            """.trimIndent()
+        )
+        // Add the unique index to prevent future duplicates.
+        db.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS index_validity_lookup_recurrence_month ON validity_lookup(recurrenceId, targetMonth)"
+        )
+    }
+}
+
 @Database(
     entities = [
         CategoryEntity::class,
@@ -62,7 +88,7 @@ val MIGRATION_11_12 = object : Migration(11, 12) {
         RecurrenceEntity::class,
         ValidityLookupEntity::class
     ],
-    version = 12,
+    version = 13,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

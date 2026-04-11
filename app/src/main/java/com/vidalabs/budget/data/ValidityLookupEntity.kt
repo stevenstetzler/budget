@@ -8,7 +8,8 @@ import androidx.room.PrimaryKey
     tableName = "validity_lookup",
     indices = [
         Index("recurrenceId"),
-        Index("targetMonth")
+        Index("targetMonth"),
+        Index(value = ["recurrenceId", "targetMonth"], unique = true)
     ]
 )
 data class ValidityLookupEntity(
