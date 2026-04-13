@@ -253,6 +253,7 @@ private fun EditTransactionDialog(
     var recurrenceEndDate by remember { mutableStateOf<LocalDate?>(null) }
     var recurrenceFreqExpanded by remember { mutableStateOf(false) }
     var showEndDatePicker by remember { mutableStateOf(false) }
+    var showRemoveRecurrenceDialog by remember { mutableStateOf(false) }
 
     // Sync recurrence fields when recurrence is loaded
     LaunchedEffect(recurrence) {
@@ -295,12 +296,13 @@ private fun EditTransactionDialog(
                 dayOfPeriod = dayOfPeriod,
                 existingId = recurrence?.id
             )
+            onDismiss()
         } else if (recurrence != null) {
-            // User toggled off recurrence — remove it
-            vm.removeRecurrence(recurrence!!.id)
+            // User toggled off recurrence — prompt before removing
+            showRemoveRecurrenceDialog = true
+        } else {
+            onDismiss()
         }
-
-        onDismiss()
     }
 
     if (showDatePicker) {
@@ -344,6 +346,54 @@ private fun EditTransactionDialog(
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) {
                     Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showRemoveRecurrenceDialog) {
+        val rec = recurrence
+        AlertDialog(
+            onDismissRequest = { showRemoveRecurrenceDialog = false },
+            title = { Text("Stop Recurring?") },
+            text = {
+                Text(
+                    "Set the end date to ${formatMonthYear(selectedMonth)} so the receipt " +
+                    "remains in all previous months, or keep only the original instance?"
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (rec != null) {
+                            val endDate = selectedMonth.atEndOfMonth().toEpochDay()
+                            vm.upsertRecurrence(
+                                receiptId = transaction.uid,
+                                frequency = rec.frequency,
+                                startDate = rec.startDate,
+                                endDate = endDate,
+                                dayOfPeriod = rec.dayOfPeriod,
+                                existingId = rec.id
+                            )
+                        }
+                        showRemoveRecurrenceDialog = false
+                        onDismiss()
+                    }
+                ) {
+                    Text("Set end date to ${formatMonthYear(selectedMonth)}")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        if (rec != null) {
+                            vm.removeRecurrence(rec.id)
+                        }
+                        showRemoveRecurrenceDialog = false
+                        onDismiss()
+                    }
+                ) {
+                    Text("Keep only original")
                 }
             }
         )

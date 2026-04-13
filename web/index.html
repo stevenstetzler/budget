@@ -1367,6 +1367,15 @@ function monthKeyToFirstEpochDay(mk) {
   return dateToEpochDay(`${y}-${String(m).padStart(2, '0')}-01`);
 }
 
+function monthKeyToLastEpochDay(mk) {
+  const y = Math.floor(mk / 100);
+  const m = mk % 100;
+  // Last day = first day of next month minus 1 day
+  const firstOfNext = new Date(Date.UTC(y, m, 1)); // month is 0-indexed, so m = next month
+  const lastDay = new Date(firstOfNext - 86400000);
+  return Math.floor(lastDay.getTime() / 86400000);
+}
+
 function generateUuid() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID();
@@ -1492,8 +1501,28 @@ document.getElementById('btn-edit-txn-save').addEventListener('click', async () 
         });
       }
     } else if (_editRec) {
-      // User un-ticked Recurring → remove the recurrence
-      await apiFetch(`/recurrences/${_editRec.id}`, { method: 'DELETE' });
+      // User un-ticked Recurring — prompt before removing
+      const mk = state.receipts.month;
+      const monthLabel = monthKeyToLabel(mk);
+      const setEndDate = confirm(
+        `Set end date to ${monthLabel} to keep the receipt in previous months (OK),\nor remove the recurrence entirely and keep only the original instance (Cancel)?`
+      );
+      if (setEndDate) {
+        const lastEpoch = monthKeyToLastEpochDay(mk);
+        await apiFetch('/recurrences', {
+          method: 'POST',
+          body: JSON.stringify({
+            id: _editRec.id,
+            receipt_id: uid,
+            frequency: _editRec.frequency,
+            start_date: _editRec.start_date,
+            end_date: lastEpoch,
+            day_of_period: _editRec.day_of_period,
+          }),
+        });
+      } else {
+        await apiFetch(`/recurrences/${_editRec.id}`, { method: 'DELETE' });
+      }
     }
 
     closeModal('modal-edit-txn');
