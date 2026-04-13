@@ -1370,10 +1370,8 @@ function monthKeyToFirstEpochDay(mk) {
 function monthKeyToLastEpochDay(mk) {
   const y = Math.floor(mk / 100);
   const m = mk % 100;
-  // Last day = first day of next month minus 1 day
-  const firstOfNext = new Date(Date.UTC(y, m, 1)); // month is 0-indexed, so m = next month
-  const lastDay = new Date(firstOfNext - 86400000);
-  return Math.floor(lastDay.getTime() / 86400000);
+  // Date.UTC(y, m, 0): day 0 of the next month (0-indexed m) = last day of current month (1-indexed)
+  return Math.floor(Date.UTC(y, m, 0) / 86400000);
 }
 
 function generateUuid() {
