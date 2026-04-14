@@ -211,11 +211,11 @@ class BudgetRepository(private val dao: BudgetDao) {
     /**
      * Remove the recurrence (and its validity_lookup entries) from a receipt.
      *
-     * Optionally update the receipt's fields at the same time. When [receiptEpochDay]
-     * is provided, the receipt is moved back to its original date (rather than the
-     * occurrence/targetMonth date used for display). Receipt-field parameters are only
-     * applied when all of them are non-null; if any is null the receipt fields are left
-     * unchanged except for clearing [recurrenceId].
+     * Optionally update the receipt's fields at the same time. When [receiptEpochDay],
+     * [receiptAmountPositive], and [receiptCategoryName] are all non-null the receipt
+     * is updated atomically with the removal, moving it back to its original start date
+     * and preserving any user edits. [receiptDescription] is intentionally excluded from
+     * that guard because it is genuinely optional on a receipt (null means no description).
      *
      * Operation order: validity_lookup is deleted BEFORE recurrenceId is cleared on
      * the receipt. This prevents a transient state where the receipt would appear in
