@@ -273,16 +273,16 @@ private fun EditTransactionDialog(
         if (amount == null || amount < 0) return
         if (categoryName.isBlank()) return
 
-        vm.updateReceipt(
-            uid = transaction.uid,
-            epochDay = date.toEpochDay(),
-            amountPositive = amount,
-            description = description.takeIf { it.isNotBlank() },
-            categoryName = categoryName
-        )
-
         // Save/update recurrence
         if (showRecurrenceSection) {
+            // Recurring: update receipt + upsert recurrence in one go.
+            vm.updateReceipt(
+                uid = transaction.uid,
+                epochDay = date.toEpochDay(),
+                amountPositive = amount,
+                description = description.takeIf { it.isNotBlank() },
+                categoryName = categoryName
+            )
             val dayOfPeriod = when (recurrenceFrequency) {
                 "MONTHLY" -> date.dayOfMonth
                 "WEEKLY", "BI_WEEKLY" -> date.dayOfWeek.value  // 1=Mon … 7=Sun
@@ -298,9 +298,19 @@ private fun EditTransactionDialog(
             )
             onDismiss()
         } else if (recurrence != null) {
-            // User toggled off recurrence — prompt before removing
+            // User toggled off recurrence — prompt before removing.
+            // Do NOT call updateReceipt here: doing so with the occurrence date
+            // (date == vl.targetMonth) would move the receipt to the wrong month.
             showRemoveRecurrenceDialog = true
         } else {
+            // Plain (non-recurring) receipt edit.
+            vm.updateReceipt(
+                uid = transaction.uid,
+                epochDay = date.toEpochDay(),
+                amountPositive = amount,
+                description = description.takeIf { it.isNotBlank() },
+                categoryName = categoryName
+            )
             onDismiss()
         }
     }
@@ -366,6 +376,18 @@ private fun EditTransactionDialog(
                 TextButton(
                     onClick = {
                         if (rec != null) {
+                            val amt = amountText.trim().toDoubleOrNull()
+                            if (amt != null) {
+                                // Update receipt back to its original start date so it
+                                // doesn't get stuck at the occurrence/targetMonth date.
+                                vm.updateReceipt(
+                                    uid = transaction.uid,
+                                    epochDay = rec.startDate,
+                                    amountPositive = amt,
+                                    description = description.takeIf { it.isNotBlank() },
+                                    categoryName = categoryName
+                                )
+                            }
                             val endDate = selectedMonth.atEndOfMonth().toEpochDay()
                             vm.upsertRecurrence(
                                 receiptId = transaction.uid,
@@ -387,7 +409,18 @@ private fun EditTransactionDialog(
                 TextButton(
                     onClick = {
                         if (rec != null) {
-                            vm.removeRecurrence(rec.id)
+                            // Pass all receipt fields so removeRecurrence can update
+                            // the receipt atomically (restoring the original startDate
+                            // and user-edited fields) without a separate updateReceipt
+                            // call that could race with the recurrence removal.
+                            val amt = amountText.trim().toDoubleOrNull()
+                            vm.removeRecurrence(
+                                recurrenceId = rec.id,
+                                receiptEpochDay = rec.startDate,
+                                receiptAmountPositive = amt,
+                                receiptDescription = description.takeIf { it.isNotBlank() },
+                                receiptCategoryName = categoryName,
+                            )
                         }
                         showRemoveRecurrenceDialog = false
                         onDismiss()

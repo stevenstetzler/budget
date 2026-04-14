@@ -210,15 +210,55 @@ class BudgetRepository(private val dao: BudgetDao) {
 
     /**
      * Remove the recurrence (and its validity_lookup entries) from a receipt.
+     *
+     * Optionally update the receipt's fields at the same time. When [receiptEpochDay]
+     * is provided, the receipt is moved back to its original date (rather than the
+     * occurrence/targetMonth date used for display). Receipt-field parameters are only
+     * applied when all of them are non-null; if any is null the receipt fields are left
+     * unchanged except for clearing [recurrenceId].
+     *
+     * Operation order: validity_lookup is deleted BEFORE recurrenceId is cleared on
+     * the receipt. This prevents a transient state where the receipt would appear in
+     * both the regular branch (recurrenceId = null) and the recurring branch
+     * (validity_lookup still present), which causes a duplicate-key crash in the
+     * observed LazyColumn.
      */
-    suspend fun removeRecurrence(recurrenceId: String) {
+    suspend fun removeRecurrence(
+        recurrenceId: String,
+        receiptEpochDay: Long? = null,
+        receiptAmountPositive: Double? = null,
+        receiptDescription: String? = null,
+        receiptCategoryName: String? = null,
+    ) {
         val rec = dao.getRecurrenceById(recurrenceId) ?: return
-        // Unlink receipt
-        val receipt = dao.getReceiptByUid(rec.receiptId)
-        if (receipt != null) {
-            dao.upsertReceipt(receipt.copy(recurrenceId = null))
-        }
+        // 1. Delete validity_lookup FIRST — receipt still has recurrenceId set here,
+        //    so it won't appear in either UNION branch and there are no duplicates.
         dao.deleteValidityLookupForRecurrence(recurrenceId)
+        // 2. Update receipt fields (if provided) and clear recurrenceId atomically.
+        val existing = dao.getReceiptByUid(rec.receiptId)
+        if (existing != null) {
+            val now = System.currentTimeMillis()
+            val updatedReceipt = if (
+                receiptEpochDay != null &&
+                receiptAmountPositive != null &&
+                receiptCategoryName != null
+            ) {
+                val cat = dao.getOrCreateCategory(receiptCategoryName, isPositiveIfCreate = false)
+                val signed = if (cat.isPositive) receiptAmountPositive else -receiptAmountPositive
+                existing.copy(
+                    epochDay = receiptEpochDay,
+                    amount = signed,
+                    description = receiptDescription,
+                    categoryUid = cat.uid,
+                    recurrenceId = null,
+                    updatedAt = now,
+                )
+            } else {
+                existing.copy(recurrenceId = null, updatedAt = now)
+            }
+            dao.upsertReceipt(updatedReceipt)
+        }
+        // 3. Delete the recurrence row itself.
         dao.deleteRecurrence(recurrenceId)
     }
 

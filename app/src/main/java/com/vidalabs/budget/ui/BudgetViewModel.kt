@@ -384,10 +384,26 @@ class BudgetViewModel(
 
     /**
      * Remove the recurrence from a receipt (make it a one-time transaction).
+     *
+     * When [receiptEpochDay] / [receiptAmountPositive] / [receiptDescription] /
+     * [receiptCategoryName] are all provided the receipt is updated atomically as
+     * part of the removal, restoring it to its original date and any edited fields.
      */
-    fun removeRecurrence(recurrenceId: String) {
+    fun removeRecurrence(
+        recurrenceId: String,
+        receiptEpochDay: Long? = null,
+        receiptAmountPositive: Double? = null,
+        receiptDescription: String? = null,
+        receiptCategoryName: String? = null,
+    ) {
         viewModelScope.launch {
-            repo.removeRecurrence(recurrenceId)
+            repo.removeRecurrence(
+                recurrenceId = recurrenceId,
+                receiptEpochDay = receiptEpochDay,
+                receiptAmountPositive = receiptAmountPositive,
+                receiptDescription = receiptDescription,
+                receiptCategoryName = receiptCategoryName,
+            )
             _recurrenceForReceipt.value = null
             _recurrenceActiveForMonth.value = true
         }
