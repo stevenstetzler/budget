@@ -180,7 +180,13 @@ class BudgetRepository(private val dao: BudgetDao) {
         dayOfPeriod: Int,
         existingId: String? = null
     ): RecurrenceEntity {
-        val id = existingId ?: UUID.randomUUID().toString()
+        // Resolve the recurrence id: use the explicitly-supplied id if present,
+        // else look up an existing recurrence for this receipt (so we never create
+        // a second row for the same receipt), and only generate a new UUID as a
+        // last resort.
+        val id = existingId
+            ?: dao.getRecurrenceForReceipt(receiptId)?.id
+            ?: UUID.randomUUID().toString()
         val rec = RecurrenceEntity(
             id = id,
             receiptId = receiptId,

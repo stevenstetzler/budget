@@ -43,6 +43,11 @@ def upgrade() -> None:
                 batch_op.add_column(
                     sa.Column('recurrenceId', sa.String(), nullable=True, index=True)
                 )
+        # Ensure the index on receipts.recurrenceId exists (ALTER TABLE won't
+        # create one automatically; it may already exist on fresh DBs).
+        existing_indexes = {idx['name'] for idx in inspector.get_indexes('receipts')}
+        if 'ix_receipts_recurrenceId' not in existing_indexes:
+            op.create_index('ix_receipts_recurrenceId', 'receipts', ['recurrenceId'], if_not_exists=True)
 
     # 2. Create the recurrence table
     op.create_table(
@@ -63,7 +68,7 @@ def upgrade() -> None:
         op.f('ix_recurrence_receiptId'), 'recurrence', ['receiptId'], unique=False, if_not_exists=True
     )
 
-    # 3. Create the validity_lookup table
+    # 3. Create the validity_lookup table (with unique constraint on recurrence+month)
     op.create_table(
         'validity_lookup',
         sa.Column('id', sa.String(), nullable=False),
@@ -71,6 +76,7 @@ def upgrade() -> None:
         sa.Column('targetMonth', sa.Integer(), nullable=False),
         sa.Column('isActive', sa.Boolean(), nullable=False),
         sa.PrimaryKeyConstraint('id'),
+        sa.UniqueConstraint('recurrenceId', 'targetMonth', name='uq_validity_lookup_recurrence_month'),
         if_not_exists=True,
     )
     op.create_index(

@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Float, Integer, String
+from sqlalchemy import Boolean, Column, Float, Integer, String, UniqueConstraint
 from database import Base
 
 
@@ -58,3 +58,7 @@ class ValidityLookup(Base):
     recurrenceId = Column(String, nullable=False, index=True)
     targetMonth = Column(Integer, nullable=False, index=True)  # epochDay of first day of month
     isActive = Column(Boolean, nullable=False, default=True)
+
+    __table_args__ = (
+        UniqueConstraint("recurrenceId", "targetMonth", name="uq_validity_lookup_recurrence_month"),
+    )

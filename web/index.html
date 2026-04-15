@@ -1410,6 +1410,12 @@ async function openEditModal(txn) {
         document.getElementById('edit-txn-recurring').checked = true;
         document.getElementById('recurrence-options').style.display = 'block';
         document.getElementById('edit-rec-frequency').value = rec.frequency || 'MONTHLY';
+        if (rec.start_date !== null && rec.start_date !== undefined) {
+          // Show the original start date, not the occurrence/targetMonth date, so
+          // saving without touching the date doesn't rewrite the recurrence start.
+          document.getElementById('edit-txn-date').value =
+            epochDayToDate(rec.start_date).toISOString().split('T')[0];
+        }
         if (rec.end_date !== null && rec.end_date !== undefined) {
           document.getElementById('edit-rec-end-date').value =
             epochDayToDate(rec.end_date).toISOString().split('T')[0];
@@ -1473,7 +1479,7 @@ document.getElementById('btn-edit-txn-save').addEventListener('click', async () 
       const endEpoch = endDateStr ? dateToEpochDay(endDateStr) : null;
       // day_of_period: day of month for MONTHLY, else 1
       const txnDate = new Date(dateV + 'T00:00:00Z');
-      const dayOfPeriod = txnDate.getUTCDate();
+      const dayOfPeriod = freq === 'MONTHLY' ? txnDate.getUTCDate() : 1;
       const recId = _editRec ? _editRec.id : generateUuid();
 
       await apiFetch('/recurrences', {

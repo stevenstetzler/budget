@@ -72,9 +72,10 @@ interface BudgetDao {
           AND epochDay >= :startEpochDay AND epochDay < :endEpochDay
         UNION ALL
         SELECT r.uid, r.categoryUid, r.amount FROM receipts r
-        JOIN recurrence rec ON rec.receiptId = r.uid
+        JOIN recurrence rec ON rec.id = r.recurrenceId
         JOIN validity_lookup vl ON vl.recurrenceId = rec.id
         WHERE r.deleted = 0
+          AND r.recurrenceId IS NOT NULL
           AND vl.targetMonth = :startEpochDay AND vl.isActive = 1
     ) combined ON combined.categoryUid = c.uid
     LEFT JOIN budgetitems b
@@ -254,10 +255,11 @@ interface BudgetDao {
         r.amount AS amount,
         r.description AS description
     FROM receipts r
-    JOIN recurrence rec ON rec.receiptId = r.uid
+    JOIN recurrence rec ON rec.id = r.recurrenceId
     JOIN validity_lookup vl ON vl.recurrenceId = rec.id
     WHERE r.deleted = 0
       AND r.categoryUid = :categoryUid
+      AND r.recurrenceId IS NOT NULL
       AND vl.targetMonth = :startEpochDay
       AND vl.isActive = 1
     ORDER BY epochDay DESC
@@ -297,10 +299,11 @@ interface BudgetDao {
         r.recurrenceId AS recurrenceId
     FROM receipts r
     JOIN categories c ON c.uid = r.categoryUid
-    JOIN recurrence rec ON rec.receiptId = r.uid
+    JOIN recurrence rec ON rec.id = r.recurrenceId
     JOIN validity_lookup vl ON vl.recurrenceId = rec.id
     WHERE r.deleted = 0
       AND c.deleted = 0
+      AND r.recurrenceId IS NOT NULL
       AND vl.targetMonth = :startEpochDay
       AND vl.isActive = 1
     ORDER BY epochDay DESC

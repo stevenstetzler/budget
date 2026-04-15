@@ -25,14 +25,22 @@ def list_receipts(
     List receipts.
 
     - Without parameters: returns all non-deleted receipts.
-    - With startEpochDay + endEpochDay: returns receipts in that date range.
-    - With targetMonth (epochDay of first day of month): returns receipts for that
-      month, including recurring receipts whose validity_lookup entry is active.
-      Regular (non-recurring) receipts are only included when their epochDay falls
-      within the date range for that month.  Recurring receipts are included solely
-      via the validity_lookup join and have their occurrenceEpochDay set to
-      targetMonth (the first day of the target month).
-      Combining targetMonth with startEpochDay/endEpochDay restricts further.
+    - With startEpochDay + endEpochDay: returns receipts in that date range
+      (recurring receipts are not included; use targetMonth for that).
+    - With targetMonth (epochDay of the first day of a month): returns receipts
+      for that month, including recurring receipts whose validity_lookup entry is
+      active for the supplied targetMonth.
+      - Regular (non-recurring) receipts are only included when their epochDay
+        falls within the effective date range for that month (or within the
+        explicitly supplied startEpochDay/endEpochDay if provided).
+      - Recurring receipts are included solely via the validity_lookup join for
+        the supplied targetMonth.  Their occurrenceEpochDay is computed from the
+        recurrence rule for that month: for MONTHLY recurrences it is the
+        day-of-period clamped to the last valid day of the month; for other
+        frequencies it defaults to the first day of the target month.
+      - When targetMonth is combined with startEpochDay/endEpochDay, the explicit
+        range affects only regular receipts; recurring receipts are still included
+        based on validity_lookup activity for targetMonth regardless of range.
     """
     if target_month is not None:
         # Determine range from targetMonth if not explicitly provided

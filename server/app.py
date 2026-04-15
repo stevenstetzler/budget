@@ -316,9 +316,10 @@ def get_transactions():
                    rec.frequency, rec.day_of_period
             FROM receipts r
             JOIN categories c ON r.category_uid = c.uid
-            JOIN recurrence rec ON rec.receipt_id = r.uid
+            JOIN recurrence rec ON rec.id = r.recurrence_id
             JOIN validity_lookup vl ON vl.recurrence_id = rec.id
             WHERE r.deleted = 0
+              AND r.recurrence_id IS NOT NULL
               AND vl.target_month = ?
               AND vl.is_active = 1
             """,
@@ -525,6 +526,14 @@ def upsert_recurrence():
         return jsonify({"error": "receipt_id and start_date are required"}), 400
 
     db = get_db()
+
+    # Validate that the receipt exists and is not deleted
+    receipt_row = db.execute(
+        "SELECT uid FROM receipts WHERE uid = ? AND deleted = 0", (receipt_id,)
+    ).fetchone()
+    if receipt_row is None:
+        return jsonify({"error": f"receipt '{receipt_id}' not found"}), 404
+
     existing = db.execute("SELECT * FROM recurrence WHERE id = ?", (rec_id,)).fetchone()
 
     rec = {
