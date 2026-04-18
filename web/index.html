@@ -1290,6 +1290,11 @@ async function renderReceipts() {
   } else {
     txns = await loadTransactions();
     const now = new Date();
+    const endEpochDay = Math.floor(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth() + 1,
+      1
+    ) / 86400000);
     const getMonthStartEpochDay = (totalMonthsIncludingCurrent) => {
       const start = new Date(Date.UTC(
         now.getUTCFullYear(),
@@ -1301,10 +1306,10 @@ async function renderReceipts() {
     };
     if (range === 'last_3_months') {
       const startEpochDay = getMonthStartEpochDay(3);
-      txns = txns.filter(t => t.epoch_day >= startEpochDay);
+      txns = txns.filter(t => t.epoch_day >= startEpochDay && t.epoch_day < endEpochDay);
     } else if (range === 'last_year') {
       const startEpochDay = getMonthStartEpochDay(12);
-      txns = txns.filter(t => t.epoch_day >= startEpochDay);
+      txns = txns.filter(t => t.epoch_day >= startEpochDay && t.epoch_day < endEpochDay);
     }
   }
   list.innerHTML = '';

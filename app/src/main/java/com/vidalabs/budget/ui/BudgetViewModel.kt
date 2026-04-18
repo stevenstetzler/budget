@@ -295,7 +295,8 @@ class BudgetViewModel(
                         val months = range.totalMonthsIncludingCurrent ?: 1
                         val startMonth = currentMonth.minusMonths((months - 1).toLong())
                         val start = startMonth.atDay(1).toEpochDay()
-                        repo.observeAllReceiptsInRange(start, Long.MAX_VALUE)
+                        val end = currentMonth.plusMonths(1).atDay(1).toEpochDay()
+                        repo.observeAllReceiptsInRange(start, end)
                     }
                 }
             }
