@@ -1279,7 +1279,7 @@ async function renderReceipts() {
     last_year: 'Last year',
     all_time: 'All time',
   };
-  document.getElementById('receipts-month-label').textContent = labelByRange[range] || monthKeyToLabel(mk);
+  document.getElementById('receipts-month-label').textContent = labelByRange[range];
 
   const list = document.getElementById('receipts-list');
   list.innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
@@ -1290,12 +1290,20 @@ async function renderReceipts() {
   } else {
     txns = await loadTransactions();
     const now = new Date();
-    const utcStartEpochDay = (year, monthIndex) => Math.floor(Date.UTC(year, monthIndex, 1) / 86400000);
+    const getMonthStartEpochDay = (totalMonthsIncludingCurrent) => {
+      const start = new Date(Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        1
+      ));
+      start.setUTCMonth(start.getUTCMonth() - (totalMonthsIncludingCurrent - 1));
+      return Math.floor(start.getTime() / 86400000);
+    };
     if (range === 'last_3_months') {
-      const startEpochDay = utcStartEpochDay(now.getUTCFullYear(), now.getUTCMonth() - 2);
+      const startEpochDay = getMonthStartEpochDay(3);
       txns = txns.filter(t => t.epoch_day >= startEpochDay);
     } else if (range === 'last_year') {
-      const startEpochDay = utcStartEpochDay(now.getUTCFullYear() - 1, now.getUTCMonth());
+      const startEpochDay = getMonthStartEpochDay(12);
       txns = txns.filter(t => t.epoch_day >= startEpochDay);
     }
   }
