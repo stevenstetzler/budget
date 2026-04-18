@@ -167,6 +167,16 @@
       color: var(--on-surface);
     }
 
+    .receipts-search-row {
+      justify-content: space-between;
+    }
+
+    .receipts-search-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
     /* ------------------------------------------------------------------ */
     /* Cards                                                                */
     /* ------------------------------------------------------------------ */
@@ -679,10 +689,17 @@
     <!-- ============================================================== -->
     <section id="pane-receipts" class="pane">
 
-      <div class="month-row">
-        <button class="month-nav" id="receipts-prev">&#8249;</button>
-        <span class="month-label" id="receipts-month-label">–</span>
-        <button class="month-nav" id="receipts-next">&#8250;</button>
+      <div class="month-row receipts-search-row">
+        <span class="month-label" id="receipts-month-label">Current month</span>
+        <div class="receipts-search-controls">
+          <label for="receipts-range">Search</label>
+          <select id="receipts-range">
+            <option value="current_month" selected>Current month</option>
+            <option value="last_3_months">Last 3 months</option>
+            <option value="last_year">Last year</option>
+            <option value="all_time">All time</option>
+          </select>
+        </div>
       </div>
 
       <div id="receipts-list"></div>
@@ -865,7 +882,7 @@ function currentMonthKey() {
 const state = {
   summary:  { month: currentMonthKey() },
   budget:   { month: currentMonthKey() },
-  receipts: { month: currentMonthKey() },
+  receipts: { month: currentMonthKey(), range: 'current_month' },
 };
 
 /* ========================================================================= */
@@ -950,8 +967,11 @@ async function loadCategories() {
   return categories;
 }
 
-async function loadTransactions(monthKey) {
-  return apiFetch(`/transactions?month=${monthKey}`);
+async function loadTransactions(monthKey = null) {
+  if (monthKey !== null && monthKey !== undefined) {
+    return apiFetch(`/transactions?month=${monthKey}`);
+  }
+  return apiFetch('/transactions');
 }
 
 async function loadBudgetItems(monthKey) {
@@ -1245,23 +1265,40 @@ async function renderBudget() {
 /* RECEIPTS pane                                                              */
 /* ========================================================================= */
 
-document.getElementById('receipts-prev').addEventListener('click', () => {
-  state.receipts.month = prevMonth(state.receipts.month);
-  renderReceipts();
-});
-document.getElementById('receipts-next').addEventListener('click', () => {
-  state.receipts.month = nextMonth(state.receipts.month);
+document.getElementById('receipts-range').addEventListener('change', (e) => {
+  state.receipts.range = e.target.value;
   renderReceipts();
 });
 
 async function renderReceipts() {
   const mk = state.receipts.month;
-  document.getElementById('receipts-month-label').textContent = monthKeyToLabel(mk);
+  const range = state.receipts.range;
+  const labelByRange = {
+    current_month: monthKeyToLabel(mk),
+    last_3_months: 'Last 3 months',
+    last_year: 'Last year',
+    all_time: 'All time',
+  };
+  document.getElementById('receipts-month-label').textContent = labelByRange[range] || monthKeyToLabel(mk);
 
   const list = document.getElementById('receipts-list');
   list.innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
 
-  const txns = await loadTransactions(mk);
+  let txns = [];
+  if (range === 'current_month') {
+    txns = await loadTransactions(mk);
+  } else {
+    txns = await loadTransactions();
+    const now = new Date();
+    const utcStartEpochDay = (year, monthIndex) => Math.floor(Date.UTC(year, monthIndex, 1) / 86400000);
+    if (range === 'last_3_months') {
+      const startEpochDay = utcStartEpochDay(now.getUTCFullYear(), now.getUTCMonth() - 2);
+      txns = txns.filter(t => t.epoch_day >= startEpochDay);
+    } else if (range === 'last_year') {
+      const startEpochDay = utcStartEpochDay(now.getUTCFullYear() - 1, now.getUTCMonth());
+      txns = txns.filter(t => t.epoch_day >= startEpochDay);
+    }
+  }
   list.innerHTML = '';
 
   if (txns.length === 0) {
@@ -1269,7 +1306,7 @@ async function renderReceipts() {
       <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="var(--on-surface-var)">
         <path d="M20 4H4c-1.11 0-2 .89-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/>
       </svg>
-      <p>No transactions this month</p>
+      <p>No transactions for this search</p>
     </div>`;
     return;
   }
