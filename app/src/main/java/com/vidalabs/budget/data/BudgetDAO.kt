@@ -288,6 +288,24 @@ interface BudgetDao {
     ORDER BY r.epochDay DESC, r.updatedAt DESC
     """
     )
+    fun observeAllTransactions(): Flow<List<TransactionRow>>
+
+    @Query(
+        """
+    SELECT
+        r.uid AS uid,
+        r.epochDay AS epochDay,
+        r.amount AS amount,
+        r.description AS description,
+        c.name AS categoryName,
+        c.isPositive AS isPositive
+    FROM receipts r
+    JOIN categories c ON c.uid = r.categoryUid
+    WHERE r.deleted = 0
+      AND c.deleted = 0
+    ORDER BY r.epochDay DESC, r.updatedAt DESC
+    """
+    )
     suspend fun getAllTransactions(): List<TransactionRow>
 
 }
