@@ -6,7 +6,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
@@ -22,37 +21,21 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.vidalabs.budget.ui.BudgetViewModel
+import com.vidalabs.budget.ui.ReceiptsSearchRange
 import com.vidalabs.budget.data.TransactionRow
 import com.vidalabs.budget.ui.components.MoneyText
-import com.vidalabs.budget.ui.components.formatMonthYear
-import com.vidalabs.budget.ui.components.MonthYearPickerDialogWheel
 import com.vidalabs.budget.ui.components.MonthDayYearPickerDialogWheel
-import com.vidalabs.budget.data.CategoryEntity
-import com.vidalabs.budget.ui.theme.SuccessContainer
 import java.time.LocalDate
-import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import kotlinx.coroutines.launch
 
 @Composable
 fun TransactionsPane(vm: BudgetViewModel, modifier: Modifier = Modifier) {
-    val ym by vm.selectedMonth.collectAsState()
-    val transactions by vm.allTransactionsForMonth.collectAsState()
+    val searchRange by vm.receiptsSearchRange.collectAsState()
+    val transactions by vm.allTransactionsForRange.collectAsState()
 
-    var showMonthPicker by remember { mutableStateOf(false) }
+    var showRangeMenu by remember { mutableStateOf(false) }
     var selectedTransaction by remember { mutableStateOf<TransactionRow?>(null) }
-
-    if (showMonthPicker) {
-        MonthYearPickerDialogWheel(
-            initial = ym,
-            onDismiss = { showMonthPicker = false },
-            onConfirm = {
-                vm.setSelectedMonth(it)
-                showMonthPicker = false
-            }
-        )
-    }
 
     if (selectedTransaction != null) {
         EditTransactionDialog(
@@ -74,8 +57,28 @@ fun TransactionsPane(vm: BudgetViewModel, modifier: Modifier = Modifier) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Receipts", style = MaterialTheme.typography.headlineMedium)
-                TextButton(onClick = { showMonthPicker = true }) {
-                    Text(formatMonthYear(ym))
+                Box {
+                    TextButton(onClick = { showRangeMenu = true }) {
+                        Text(searchRange.label)
+                        Icon(
+                            imageVector = Icons.Default.ArrowDropDown,
+                            contentDescription = "Select receipts search range"
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = showRangeMenu,
+                        onDismissRequest = { showRangeMenu = false }
+                    ) {
+                        ReceiptsSearchRange.entries.forEach { range ->
+                            DropdownMenuItem(
+                                text = { Text(range.label) },
+                                onClick = {
+                                    vm.setReceiptsSearchRange(range)
+                                    showRangeMenu = false
+                                }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -89,7 +92,7 @@ fun TransactionsPane(vm: BudgetViewModel, modifier: Modifier = Modifier) {
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            "No transactions in this month.",
+                            "No transactions for this search.",
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
@@ -203,7 +206,6 @@ private fun EditTransactionDialog(
     var showDatePicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     
-    val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
     val amountFocusRequester = remember { FocusRequester() }
     val descriptionFocusRequester = remember { FocusRequester() }

@@ -50,6 +50,13 @@ private data class ImportRecord(
 
 fun YearMonth.toMonthKey(): Int = this.year * 100 + this.monthValue
 
+enum class ReceiptsSearchRange(val label: String, val totalMonthsIncludingCurrent: Int?) {
+    CURRENT_MONTH("Current month", 1),
+    LAST_3_MONTHS("Last 3 months", 3),
+    LAST_YEAR("Last year", 12),
+    ALL_TIME("All time", null)
+}
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class BudgetViewModel(
     private val repo: BudgetRepository,
@@ -60,6 +67,13 @@ class BudgetViewModel(
 
     fun setSelectedMonth(m: YearMonth) {
         _selectedMonth.value = m
+    }
+
+    private val _receiptsSearchRange = MutableStateFlow(ReceiptsSearchRange.CURRENT_MONTH)
+    val receiptsSearchRange: StateFlow<ReceiptsSearchRange> = _receiptsSearchRange.asStateFlow()
+
+    fun setReceiptsSearchRange(range: ReceiptsSearchRange) {
+        _receiptsSearchRange.value = range
     }
 
     fun createCategory(name: String, isPositive: Boolean) {
@@ -266,12 +280,25 @@ class BudgetViewModel(
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val allTransactionsForMonth: StateFlow<List<com.vidalabs.budget.data.TransactionRow>> =
-        selectedMonth
-            .flatMapLatest { ym ->
-                val start = ym.atDay(1).toEpochDay()
-                val end = ym.plusMonths(1).atDay(1).toEpochDay()
-                repo.observeAllReceiptsInRange(start, end)
+    val allTransactionsForRange: StateFlow<List<com.vidalabs.budget.data.TransactionRow>> =
+        receiptsSearchRange
+            .flatMapLatest { range ->
+                val currentMonth = YearMonth.now()
+                when (range) {
+                    ReceiptsSearchRange.ALL_TIME -> repo.observeAllTransactions()
+                    ReceiptsSearchRange.CURRENT_MONTH -> {
+                        val start = currentMonth.atDay(1).toEpochDay()
+                        val end = currentMonth.plusMonths(1).atDay(1).toEpochDay()
+                        repo.observeAllReceiptsInRange(start, end)
+                    }
+                    else -> {
+                        val months = range.totalMonthsIncludingCurrent ?: 1
+                        val startMonth = currentMonth.minusMonths((months - 1).toLong())
+                        val start = startMonth.atDay(1).toEpochDay()
+                        val end = currentMonth.plusMonths(1).atDay(1).toEpochDay()
+                        repo.observeAllReceiptsInRange(start, end)
+                    }
+                }
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
