@@ -6,5 +6,6 @@ data class TransactionRow(
     val amount: Double,        // signed
     val description: String?,
     val categoryName: String,
-    val isPositive: Boolean
+    val isPositive: Boolean,
+    val recurrenceId: String? = null
 )

@@ -6,9 +6,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,13 +27,19 @@ import com.vidalabs.budget.ui.components.MoneyText
 import com.vidalabs.budget.ui.components.formatMonthYear
 import com.vidalabs.budget.ui.components.MonthYearPickerDialogWheel
 import com.vidalabs.budget.ui.components.MonthDayYearPickerDialogWheel
-import com.vidalabs.budget.data.CategoryEntity
-import com.vidalabs.budget.ui.theme.SuccessContainer
+import com.vidalabs.budget.data.RecurrenceEntity
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import kotlinx.coroutines.launch
+
+/** Human-readable labels for recurrence frequencies. */
+private val FREQUENCY_OPTIONS = listOf(
+    "DAILY" to "Daily",
+    "WEEKLY" to "Weekly",
+    "BI_WEEKLY" to "Bi-weekly",
+    "MONTHLY" to "Monthly"
+)
 
 @Composable
 fun TransactionsPane(vm: BudgetViewModel, modifier: Modifier = Modifier) {
@@ -115,6 +121,7 @@ private fun TransactionCard(transaction: TransactionRow, onClick: () -> Unit) {
     val date = remember(transaction.epochDay) {
         LocalDate.ofEpochDay(transaction.epochDay).toString()
     }
+    val isRecurring = transaction.recurrenceId != null
 
     Card(
         modifier = Modifier
@@ -151,6 +158,28 @@ private fun TransactionCard(transaction: TransactionRow, onClick: () -> Unit) {
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
                     }
+                    if (isRecurring) {
+                        Surface(
+                            shape = MaterialTheme.shapes.small,
+                            color = MaterialTheme.colorScheme.tertiaryContainer
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Refresh,
+                                    contentDescription = "Recurring",
+                                    modifier = Modifier.size(10.dp)
+                                )
+                                Text(
+                                    "Recurring",
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                        }
+                    }
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
@@ -184,17 +213,32 @@ private fun EditTransactionDialog(
     onDismiss: () -> Unit
 ) {
     val categories by vm.categories.collectAsState()
+    val recurrence by vm.recurrenceForReceipt.collectAsState()
+    val recurrenceActiveForMonth by vm.recurrenceActiveForMonth.collectAsState()
+    val selectedMonth by vm.selectedMonth.collectAsState()
     val dateFmt = remember { DateTimeFormatter.ISO_LOCAL_DATE }
-    
+
+    // Load recurrence when dialog opens
+    LaunchedEffect(transaction.uid) {
+        vm.loadRecurrenceForReceipt(transaction.uid)
+    }
+
+    // When recurrence changes, load isActive for the current month
+    LaunchedEffect(recurrence?.id) {
+        val id = recurrence?.id
+        if (id != null) {
+            vm.loadRecurrenceActiveForMonth(id)
+        }
+    }
+
     val transactionDate = remember(transaction.epochDay) {
         LocalDate.ofEpochDay(transaction.epochDay)
     }
-    
-    // Calculate the absolute amount (positive value)
+
     val absoluteAmount = remember(transaction.amount) {
         kotlin.math.abs(transaction.amount)
     }
-    
+
     var date by remember { mutableStateOf(transactionDate) }
     var categoryName by remember { mutableStateOf(transaction.categoryName) }
     var amountText by remember { mutableStateOf(String.format(Locale.US, "%.2f", absoluteAmount)) }
@@ -202,30 +246,78 @@ private fun EditTransactionDialog(
     var categoryExpanded by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
-    
-    val scope = rememberCoroutineScope()
+
+    // Recurrence editing state
+    var showRecurrenceSection by remember { mutableStateOf(transaction.recurrenceId != null) }
+    var recurrenceFrequency by remember { mutableStateOf("MONTHLY") }
+    var recurrenceEndDate by remember { mutableStateOf<LocalDate?>(null) }
+    var recurrenceFreqExpanded by remember { mutableStateOf(false) }
+    var showEndDatePicker by remember { mutableStateOf(false) }
+    var showRemoveRecurrenceDialog by remember { mutableStateOf(false) }
+
+    // Sync recurrence fields when recurrence is loaded
+    LaunchedEffect(recurrence) {
+        val rec = recurrence
+        if (rec != null) {
+            recurrenceFrequency = rec.frequency
+            recurrenceEndDate = rec.endDate?.let { LocalDate.ofEpochDay(it) }
+            // Default the date field to the recurrence's actual start date, not the
+            // virtual occurrence date (vl.targetMonth). Without this, pressing Save
+            // from a future occurrence month would silently move the receipt's epochDay
+            // and the recurrence's startDate to the occurrence month.
+            date = LocalDate.ofEpochDay(rec.startDate)
+        }
+    }
+
     val focusManager = LocalFocusManager.current
     val amountFocusRequester = remember { FocusRequester() }
     val descriptionFocusRequester = remember { FocusRequester() }
-    
+
     fun saveTransaction() {
         val amount = amountText.trim().toDoubleOrNull()
-        if (amount == null || amount < 0) {
-            return
-        }
-        
-        if (categoryName.isBlank()) {
-            return
-        }
+        if (amount == null || amount < 0) return
+        if (categoryName.isBlank()) return
 
-        vm.updateReceipt(
-            uid = transaction.uid,
-            epochDay = date.toEpochDay(),
-            amountPositive = amount,
-            description = description.takeIf { it.isNotBlank() },
-            categoryName = categoryName
-        )
-        onDismiss()
+        // Save/update recurrence
+        if (showRecurrenceSection) {
+            // Recurring: update receipt + upsert recurrence in one go.
+            vm.updateReceipt(
+                uid = transaction.uid,
+                epochDay = date.toEpochDay(),
+                amountPositive = amount,
+                description = description.takeIf { it.isNotBlank() },
+                categoryName = categoryName
+            )
+            val dayOfPeriod = when (recurrenceFrequency) {
+                "MONTHLY" -> date.dayOfMonth
+                "WEEKLY", "BI_WEEKLY" -> date.dayOfWeek.value  // 1=Mon … 7=Sun
+                else -> 1
+            }
+            vm.upsertRecurrence(
+                receiptId = transaction.uid,
+                frequency = recurrenceFrequency,
+                startDate = date.toEpochDay(),
+                endDate = recurrenceEndDate?.toEpochDay(),
+                dayOfPeriod = dayOfPeriod,
+                existingId = recurrence?.id
+            )
+            onDismiss()
+        } else if (recurrence != null) {
+            // User toggled off recurrence — prompt before removing.
+            // Do NOT call updateReceipt here: doing so with the occurrence date
+            // (date == vl.targetMonth) would move the receipt to the wrong month.
+            showRemoveRecurrenceDialog = true
+        } else {
+            // Plain (non-recurring) receipt edit.
+            vm.updateReceipt(
+                uid = transaction.uid,
+                epochDay = date.toEpochDay(),
+                amountPositive = amount,
+                description = description.takeIf { it.isNotBlank() },
+                categoryName = categoryName
+            )
+            onDismiss()
+        }
     }
 
     if (showDatePicker) {
@@ -235,6 +327,17 @@ private fun EditTransactionDialog(
             onConfirm = { newDate ->
                 date = newDate
                 showDatePicker = false
+            }
+        )
+    }
+
+    if (showEndDatePicker) {
+        MonthDayYearPickerDialogWheel(
+            initial = recurrenceEndDate ?: LocalDate.now(),
+            onDismiss = { showEndDatePicker = false },
+            onConfirm = { newDate ->
+                recurrenceEndDate = newDate
+                showEndDatePicker = false
             }
         )
     }
@@ -263,8 +366,82 @@ private fun EditTransactionDialog(
         )
     }
 
+    if (showRemoveRecurrenceDialog) {
+        val rec = recurrence
+        AlertDialog(
+            onDismissRequest = { showRemoveRecurrenceDialog = false },
+            title = { Text("Stop Recurring?") },
+            text = {
+                Text(
+                    "Set the end date to ${formatMonthYear(selectedMonth)} so the receipt " +
+                    "remains in all previous months, or keep only the original instance?"
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (rec != null) {
+                            val amt = amountText.trim().toDoubleOrNull()
+                            if (amt != null) {
+                                // Update receipt back to its original start date so it
+                                // doesn't get stuck at the occurrence/targetMonth date.
+                                vm.updateReceipt(
+                                    uid = transaction.uid,
+                                    epochDay = rec.startDate,
+                                    amountPositive = amt,
+                                    description = description.takeIf { it.isNotBlank() },
+                                    categoryName = categoryName
+                                )
+                            }
+                            val endDate = selectedMonth.atEndOfMonth().toEpochDay()
+                            vm.upsertRecurrence(
+                                receiptId = transaction.uid,
+                                frequency = rec.frequency,
+                                startDate = rec.startDate,
+                                endDate = endDate,
+                                dayOfPeriod = rec.dayOfPeriod,
+                                existingId = rec.id
+                            )
+                        }
+                        showRemoveRecurrenceDialog = false
+                        onDismiss()
+                    }
+                ) {
+                    Text("Set end date to ${formatMonthYear(selectedMonth)}")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        if (rec != null) {
+                            // Pass all receipt fields so removeRecurrence can update
+                            // the receipt atomically (restoring the original startDate
+                            // and user-edited fields) without a separate updateReceipt
+                            // call that could race with the recurrence removal.
+                            val amt = amountText.trim().toDoubleOrNull()
+                            vm.removeRecurrence(
+                                recurrenceId = rec.id,
+                                receiptEpochDay = rec.startDate,
+                                receiptAmountPositive = amt,
+                                receiptDescription = description.takeIf { it.isNotBlank() },
+                                receiptCategoryName = categoryName,
+                            )
+                        }
+                        showRemoveRecurrenceDialog = false
+                        onDismiss()
+                    }
+                ) {
+                    Text("Keep only original")
+                }
+            }
+        )
+    }
+
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            vm.clearRecurrenceForReceipt()
+            onDismiss()
+        },
         title = {
             Text("Edit Transaction", style = MaterialTheme.typography.headlineSmall)
         },
@@ -334,9 +511,7 @@ private fun EditTransactionDialog(
                         imeAction = ImeAction.Done
                     ),
                     keyboardActions = KeyboardActions(
-                        onDone = { 
-                            focusManager.clearFocus()
-                        }
+                        onDone = { focusManager.clearFocus() }
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -353,18 +528,111 @@ private fun EditTransactionDialog(
                         imeAction = ImeAction.Done
                     ),
                     keyboardActions = KeyboardActions(
-                        onDone = { 
-                            focusManager.clearFocus()
-                        }
+                        onDone = { focusManager.clearFocus() }
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(descriptionFocusRequester)
                 )
+
+                // ── Recurrence section ──────────────────────────────────────
+                HorizontalDivider()
+
+                // Toggle recurring on/off
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Recurring", style = MaterialTheme.typography.bodyMedium)
+                    Switch(
+                        checked = showRecurrenceSection,
+                        onCheckedChange = { showRecurrenceSection = it }
+                    )
+                }
+
+                if (showRecurrenceSection) {
+                    // isActive checkbox for this month (only shown when already recurring)
+                    if (recurrence != null) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                "Active in ${formatMonthYear(selectedMonth)}",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Checkbox(
+                                checked = recurrenceActiveForMonth,
+                                onCheckedChange = { checked ->
+                                    vm.setRecurrenceActiveForMonth(recurrence!!.id, checked)
+                                }
+                            )
+                        }
+                    }
+
+                    // Frequency picker
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = FREQUENCY_OPTIONS.find { it.first == recurrenceFrequency }?.second
+                                ?: recurrenceFrequency,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Frequency") },
+                            trailingIcon = {
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .clickable { recurrenceFreqExpanded = true }
+                        )
+                        DropdownMenu(
+                            expanded = recurrenceFreqExpanded,
+                            onDismissRequest = { recurrenceFreqExpanded = false }
+                        ) {
+                            FREQUENCY_OPTIONS.forEach { (key, label) ->
+                                DropdownMenuItem(
+                                    text = { Text(label) },
+                                    onClick = {
+                                        recurrenceFrequency = key
+                                        recurrenceFreqExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    // End date (optional)
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = recurrenceEndDate?.format(dateFmt) ?: "Ongoing",
+                            onValueChange = {},
+                            label = { Text("End Date (optional)") },
+                            readOnly = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .clickable { showEndDatePicker = true }
+                        )
+                    }
+                    if (recurrenceEndDate != null) {
+                        TextButton(
+                            onClick = { recurrenceEndDate = null },
+                            modifier = Modifier.align(Alignment.End)
+                        ) {
+                            Text("Clear end date")
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
-            // We put all buttons in this slot to control the layout fully
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -384,7 +652,10 @@ private fun EditTransactionDialog(
 
                 // Right side: Cancel and Save
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = onDismiss) {
+                    TextButton(onClick = {
+                        vm.clearRecurrenceForReceipt()
+                        onDismiss()
+                    }) {
                         Text("Cancel")
                     }
                     Button(onClick = { saveTransaction() }) {
