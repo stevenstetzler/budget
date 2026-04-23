@@ -571,6 +571,132 @@
       display: none;
     }
     .error-banner.show { display: block; }
+
+    /* ------------------------------------------------------------------ */
+    /* View toggle (Transactions / Analysis)                               */
+    /* ------------------------------------------------------------------ */
+    #view-toggle {
+      display: flex;
+      background: rgba(255,255,255,0.18);
+      border-radius: 20px;
+      padding: 2px;
+      gap: 0;
+      flex-shrink: 0;
+    }
+
+    .view-toggle-btn {
+      background: none;
+      border: none;
+      color: rgba(255,255,255,0.82);
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 4px 11px;
+      border-radius: 18px;
+      cursor: pointer;
+      letter-spacing: 0.03em;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .view-toggle-btn.active {
+      background: rgba(255,255,255,0.9);
+      color: var(--primary);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Analysis pane                                                       */
+    /* ------------------------------------------------------------------ */
+    .analysis-month-group {
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--outline-light);
+    }
+    .analysis-month-group:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+
+    .analysis-month-title {
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--on-surface-var);
+      margin-bottom: 8px;
+    }
+
+    .analysis-bar-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 5px;
+    }
+
+    .analysis-bar-label {
+      font-size: 0.78rem;
+      width: 58px;
+      color: var(--on-surface-var);
+      flex-shrink: 0;
+    }
+
+    .analysis-bar-track {
+      flex: 1;
+      height: 18px;
+      background: var(--outline-light);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .analysis-bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.35s ease;
+      min-width: 2px;
+    }
+    .analysis-bar-fill.income   { background: var(--success); }
+    .analysis-bar-fill.spending { background: var(--error); }
+
+    .analysis-bar-amount {
+      font-size: 0.78rem;
+      font-weight: 600;
+      min-width: 72px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    /* Category filter dropdown */
+    #analysis-cat-filter-wrap { position: relative; margin-bottom: 14px; }
+
+    #analysis-cat-filter-menu {
+      display: none;
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0; right: 0;
+      background: var(--surface);
+      border: 1px solid var(--outline-light);
+      border-radius: 10px;
+      z-index: 200;
+      max-height: 240px;
+      overflow-y: auto;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    }
+
+    .cat-filter-item {
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--outline-light);
+    }
+    .cat-filter-item:last-child { border-bottom: none; }
+    .cat-filter-item label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      text-transform: none;
+      font-size: 0.88rem;
+      font-weight: normal;
+      cursor: pointer;
+      letter-spacing: normal;
+      color: var(--on-surface);
+    }
+    .cat-filter-item label.select-all-label {
+      font-weight: 600;
+      color: var(--primary);
+    }
   </style>
 </head>
 <body>
@@ -582,6 +708,10 @@
   <!-- ================================================================ -->
   <header id="topbar">
     <h1>Budget</h1>
+    <div id="view-toggle">
+      <button class="view-toggle-btn active" data-view="transactions">Transactions</button>
+      <button class="view-toggle-btn" data-view="analysis">Analysis</button>
+    </div>
     <button id="btn-prefs" title="Preferences" aria-label="Preferences">
       <!-- Settings gear icon -->
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -719,6 +849,49 @@
       </div>
 
       <div id="receipts-list"></div>
+
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- ANALYSIS pane                                                   -->
+    <!-- ============================================================== -->
+    <section id="pane-analysis" class="pane">
+
+      <div class="month-row">
+        <button class="month-nav" id="analysis-prev">&#8249;</button>
+        <span class="month-label" id="analysis-month-label">–</span>
+        <button class="month-nav" id="analysis-next">&#8250;</button>
+      </div>
+
+      <div class="form-group">
+        <label for="analysis-range">Time Range</label>
+        <select id="analysis-range">
+          <option value="1">This Month</option>
+          <option value="3">Last 3 Months</option>
+          <option value="6" selected>Last 6 Months</option>
+          <option value="12">Last Year</option>
+          <option value="0">All Time</option>
+        </select>
+      </div>
+
+      <div id="analysis-cat-filter-wrap">
+        <button id="analysis-cat-filter-btn" class="btn btn-outlined" style="width:100%;justify-content:space-between;">
+          <span id="analysis-cat-filter-label">All Categories</span>
+          <span>&#9660;</span>
+        </button>
+        <div id="analysis-cat-filter-menu">
+          <div class="cat-filter-item">
+            <label class="select-all-label">
+              <input type="checkbox" id="analysis-cat-select-all" checked />
+              Select All
+            </label>
+          </div>
+          <div id="analysis-cat-list"></div>
+        </div>
+      </div>
+
+      <div id="analysis-chart"></div>
+      <div id="analysis-summary-table"></div>
 
     </section>
 
@@ -916,17 +1089,13 @@ const LS_URL_KEY = 'budget_api_url';
 let apiBase = (localStorage.getItem(LS_URL_KEY) || '').replace(/\/$/, '');
 let categories = [];  // [{uid, name, is_positive}]
 
-// Per-pane month state (YYYYMM int)
+// Single shared month across Summary, Budget, Receipts, and Analysis panes
 function currentMonthKey() {
   const now = new Date();
   return now.getFullYear() * 100 + (now.getMonth() + 1);
 }
 
-const state = {
-  summary:  { month: currentMonthKey() },
-  budget:   { month: currentMonthKey() },
-  receipts: { month: currentMonthKey() },
-};
+let sharedMonth = currentMonthKey();
 
 /* ========================================================================= */
 /* Utilities                                                                  */
@@ -1120,22 +1289,29 @@ document.getElementById('btn-new-cat-save').addEventListener('click', async () =
 /* ========================================================================= */
 
 document.getElementById('summary-prev').addEventListener('click', () => {
-  state.summary.month = prevMonth(state.summary.month);
+  sharedMonth = prevMonth(sharedMonth);
   renderSummary();
 });
 document.getElementById('summary-next').addEventListener('click', () => {
-  state.summary.month = nextMonth(state.summary.month);
+  sharedMonth = nextMonth(sharedMonth);
   renderSummary();
 });
 
 async function renderSummary() {
-  const mk = state.summary.month;
+  const mk = sharedMonth;
   document.getElementById('summary-month-label').textContent = monthKeyToLabel(mk);
 
-  const [txns, budgetItems] = await Promise.all([
-    loadTransactions(mk),
-    loadBudgetItems(mk),
-  ]);
+  const incomeList   = document.getElementById('summary-income-list');
+  const spendingList = document.getElementById('summary-spending-list');
+  incomeList.innerHTML   = '<div class="loading-row"><div class="spinner"></div></div>';
+  spendingList.innerHTML = '';
+
+  try {
+    if (categories.length === 0) await loadCategories();
+    const [txns, budgetItems] = await Promise.all([
+      loadTransactions(mk),
+      loadBudgetItems(mk),
+    ]);
 
   // Compute totals
   let totalIncome = 0, totalSpending = 0;
@@ -1229,6 +1405,10 @@ async function renderSummary() {
   } else {
     spendingCats.forEach(c => spendingList.appendChild(buildCatRow(c)));
   }
+  } catch (e) {
+    incomeList.innerHTML = `<p style="padding:12px;color:var(--error);font-size:0.85rem;">Failed to load: ${e.message}</p>`;
+    spendingList.innerHTML = '';
+  }
 }
 
 /* ========================================================================= */
@@ -1236,16 +1416,16 @@ async function renderSummary() {
 /* ========================================================================= */
 
 document.getElementById('budget-prev').addEventListener('click', () => {
-  state.budget.month = prevMonth(state.budget.month);
+  sharedMonth = prevMonth(sharedMonth);
   renderBudget();
 });
 document.getElementById('budget-next').addEventListener('click', () => {
-  state.budget.month = nextMonth(state.budget.month);
+  sharedMonth = nextMonth(sharedMonth);
   renderBudget();
 });
 
 async function renderBudget() {
-  const mk = state.budget.month;
+  const mk = sharedMonth;
   document.getElementById('budget-month-label').textContent = monthKeyToLabel(mk);
 
   const items = await loadBudgetItems(mk);
@@ -1306,16 +1486,16 @@ async function renderBudget() {
 /* ========================================================================= */
 
 document.getElementById('receipts-prev').addEventListener('click', () => {
-  state.receipts.month = prevMonth(state.receipts.month);
+  sharedMonth = prevMonth(sharedMonth);
   renderReceipts();
 });
 document.getElementById('receipts-next').addEventListener('click', () => {
-  state.receipts.month = nextMonth(state.receipts.month);
+  sharedMonth = nextMonth(sharedMonth);
   renderReceipts();
 });
 
 async function renderReceipts() {
-  const mk = state.receipts.month;
+  const mk = sharedMonth;
   document.getElementById('receipts-month-label').textContent = monthKeyToLabel(mk);
 
   const list = document.getElementById('receipts-list');
@@ -1421,7 +1601,7 @@ async function openEditModal(txn) {
             epochDayToDate(rec.end_date).toISOString().split('T')[0];
         }
         // Show active-in-month toggle for existing recurrences
-        const mk = state.receipts.month;
+        const mk = sharedMonth;
         const targetEpoch = monthKeyToFirstEpochDay(mk);
         document.getElementById('edit-rec-month-label').textContent = monthKeyToLabel(mk);
         document.getElementById('recurrence-active-section').style.display = 'block';
@@ -1496,7 +1676,7 @@ document.getElementById('btn-edit-txn-save').addEventListener('click', async () 
 
       // Save active-in-month toggle (only relevant if editing an existing recurrence)
       if (_editRec) {
-        const mk = state.receipts.month;
+        const mk = sharedMonth;
         const targetEpoch = monthKeyToFirstEpochDay(mk);
         const isActive = document.getElementById('edit-rec-active-month').checked;
         await apiFetch(`/recurrences/${recId}/months/${targetEpoch}`, {
@@ -1506,7 +1686,7 @@ document.getElementById('btn-edit-txn-save').addEventListener('click', async () 
       }
     } else if (_editRec) {
       // User un-ticked Recurring — prompt before removing
-      const mk = state.receipts.month;
+      const mk = sharedMonth;
       const monthLabel = monthKeyToLabel(mk);
       const setEndDate = confirm(
         `Set end date to ${monthLabel} to keep the receipt in this + previous months (OK),\nor remove the recurrence entirely and keep only the original instance (Cancel)?`
@@ -1562,7 +1742,10 @@ function updatePrefDisplay() {
   document.getElementById('pref-url-display').textContent = apiBase || 'not set';
 }
 
-document.getElementById('btn-prefs').addEventListener('click', () => switchTab('prefs'));
+document.getElementById('btn-prefs').addEventListener('click', () => {
+  if (currentView === 'analysis') switchView('transactions');
+  switchTab('prefs');
+});
 
 document.getElementById('btn-change-url').addEventListener('click', () => {
   document.getElementById('url-input').value = apiBase;
@@ -1756,7 +1939,11 @@ document.getElementById('btn-import-csv-save').addEventListener('click', async (
 /* Tab switching                                                              */
 /* ========================================================================= */
 
+let _lastActiveTab = 'entry';
+let currentView = 'transactions';
+
 function switchTab(name) {
+  _lastActiveTab = name;
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.pane === name));
   document.querySelectorAll('.pane').forEach(p => p.classList.toggle('active', p.id === 'pane-' + name));
 
@@ -1764,6 +1951,26 @@ function switchTab(name) {
   if (name === 'budget')   renderBudget();
   if (name === 'receipts') renderReceipts();
 }
+
+function switchView(view) {
+  currentView = view;
+  document.querySelectorAll('.view-toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  const tabbar = document.getElementById('tabbar');
+  if (view === 'transactions') {
+    tabbar.style.display = 'flex';
+    document.getElementById('pane-analysis').classList.remove('active');
+    switchTab(_lastActiveTab);
+  } else {
+    tabbar.style.display = 'none';
+    document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
+    document.getElementById('pane-analysis').classList.add('active');
+    renderAnalysis();
+  }
+}
+
+document.querySelectorAll('.view-toggle-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchView(btn.dataset.view));
+});
 
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => switchTab(btn.dataset.pane));
@@ -1775,6 +1982,284 @@ document.querySelectorAll('.modal-overlay').forEach(overlay => {
     if (e.target === overlay) overlay.classList.remove('open');
   });
 });
+
+/* ========================================================================= */
+/* ANALYSIS pane                                                              */
+/* ========================================================================= */
+
+let _analysisCache = null;
+let _analysisDeselectedCats = new Set();
+
+document.getElementById('analysis-prev').addEventListener('click', () => {
+  sharedMonth = prevMonth(sharedMonth);
+  renderAnalysis();
+});
+document.getElementById('analysis-next').addEventListener('click', () => {
+  sharedMonth = nextMonth(sharedMonth);
+  renderAnalysis();
+});
+
+document.getElementById('analysis-range').addEventListener('change', () => {
+  _analysisCache = null;
+  _analysisDeselectedCats = new Set();
+  renderAnalysis();
+});
+
+document.getElementById('analysis-cat-filter-btn').addEventListener('click', e => {
+  e.stopPropagation();
+  const menu = document.getElementById('analysis-cat-filter-menu');
+  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+});
+
+document.addEventListener('click', () => {
+  const menu = document.getElementById('analysis-cat-filter-menu');
+  if (menu) menu.style.display = 'none';
+});
+
+async function renderAnalysis() {
+  const mk = sharedMonth;
+  document.getElementById('analysis-month-label').textContent = monthKeyToLabel(mk);
+
+  const rangeVal = parseInt(document.getElementById('analysis-range').value);
+
+  // Determine which months to load (oldest → newest)
+  let months = [];
+  if (rangeVal === 0) {
+    // All time: find earliest from all transactions
+    try {
+      const allTxns = await apiFetch('/transactions');
+      let startMk;
+      if (allTxns.length > 0) {
+        const minDay = Math.min(...allTxns.map(t => t.epoch_day));
+        const d = new Date(minDay * 86400000);
+        startMk = d.getUTCFullYear() * 100 + (d.getUTCMonth() + 1);
+      } else {
+        startMk = mk;
+      }
+      let cur = startMk;
+      while (cur <= mk) { months.push(cur); cur = nextMonth(cur); }
+    } catch { months = [mk]; }
+  } else {
+    let cur = mk;
+    for (let i = 0; i < rangeVal; i++) { months.unshift(cur); cur = prevMonth(cur); }
+  }
+
+  const chartEl = document.getElementById('analysis-chart');
+  const summaryEl = document.getElementById('analysis-summary-table');
+  chartEl.innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
+  summaryEl.innerHTML = '';
+
+  if (categories.length === 0) {
+    try { await loadCategories(); } catch (_) { /* ignore */ }
+  }
+
+  let monthlyData;
+  try {
+    const results = await Promise.all(months.map(m => loadTransactions(m)));
+    monthlyData = months.map((m, i) => ({ month: m, transactions: results[i] }));
+    _analysisCache = { months, monthlyData };
+  } catch (e) {
+    chartEl.innerHTML = `<p style="color:var(--error);padding:16px;">Failed to load data: ${e.message}</p>`;
+    return;
+  }
+
+  // Collect categories that appear in the selected range
+  const catUidsInRange = new Set();
+  monthlyData.forEach(md => md.transactions.forEach(t => catUidsInRange.add(t.category_uid)));
+
+  // Rebuild category filter dropdown
+  _buildAnalysisCatFilter(catUidsInRange);
+
+  // Render chart + summary
+  _renderAnalysisVisuals(monthlyData);
+}
+
+function _buildAnalysisCatFilter(catUidsInRange) {
+  const catListEl = document.getElementById('analysis-cat-list');
+  catListEl.innerHTML = '';
+
+  // Remove stale deselections for categories no longer in range
+  for (const uid of [..._analysisDeselectedCats]) {
+    if (!catUidsInRange.has(uid)) _analysisDeselectedCats.delete(uid);
+  }
+
+  const rangeCats = categories.filter(c => catUidsInRange.has(c.uid));
+
+  rangeCats.forEach(cat => {
+    const div = document.createElement('div');
+    div.className = 'cat-filter-item';
+    const label = document.createElement('label');
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.dataset.uid = cat.uid;
+    chk.checked = !_analysisDeselectedCats.has(cat.uid);
+    chk.addEventListener('change', () => {
+      if (chk.checked) _analysisDeselectedCats.delete(cat.uid);
+      else _analysisDeselectedCats.add(cat.uid);
+      document.getElementById('analysis-cat-select-all').checked = _analysisDeselectedCats.size === 0;
+      _updateAnalysisCatLabel(rangeCats);
+      if (_analysisCache) _renderAnalysisVisuals(_analysisCache.monthlyData);
+    });
+    label.appendChild(chk);
+    label.appendChild(document.createTextNode(' ' + cat.name + (cat.is_positive ? ' (income)' : '')));
+    div.appendChild(label);
+    catListEl.appendChild(div);
+  });
+
+  // Select all checkbox
+  const selectAllEl = document.getElementById('analysis-cat-select-all');
+  selectAllEl.checked = _analysisDeselectedCats.size === 0;
+  selectAllEl.onchange = () => {
+    if (selectAllEl.checked) {
+      _analysisDeselectedCats.clear();
+      catListEl.querySelectorAll('input[type=checkbox]').forEach(c => c.checked = true);
+    } else {
+      rangeCats.forEach(c => _analysisDeselectedCats.add(c.uid));
+      catListEl.querySelectorAll('input[type=checkbox]').forEach(c => c.checked = false);
+    }
+    _updateAnalysisCatLabel(rangeCats);
+    if (_analysisCache) _renderAnalysisVisuals(_analysisCache.monthlyData);
+  };
+
+  _updateAnalysisCatLabel(rangeCats);
+}
+
+function _updateAnalysisCatLabel(rangeCats) {
+  const deselCount = rangeCats.filter(c => _analysisDeselectedCats.has(c.uid)).length;
+  const el = document.getElementById('analysis-cat-filter-label');
+  if (deselCount === 0) el.textContent = 'All Categories';
+  else if (deselCount === rangeCats.length) el.textContent = 'No Categories';
+  else el.textContent = `${rangeCats.length - deselCount} of ${rangeCats.length} Categories`;
+}
+
+function _renderAnalysisVisuals(monthlyData) {
+  const chartEl = document.getElementById('analysis-chart');
+  const summaryEl = document.getElementById('analysis-summary-table');
+  chartEl.innerHTML = '';
+  summaryEl.innerHTML = '';
+
+  if (!monthlyData || monthlyData.length === 0) return;
+
+  // Compute per-month income/spending (filtered by selected categories)
+  const monthStats = monthlyData.map(md => {
+    let income = 0, spending = 0;
+    md.transactions.forEach(t => {
+      if (_analysisDeselectedCats.has(t.category_uid)) return;
+      if (t.amount > 0) income += t.amount;
+      else spending += Math.abs(t.amount);
+    });
+    return { month: md.month, income, spending, net: income - spending };
+  });
+
+  const maxAmt = Math.max(...monthStats.map(ms => Math.max(ms.income, ms.spending)), 1);
+
+  // Chart card
+  const chartCard = document.createElement('div');
+  chartCard.className = 'card';
+  chartCard.style.cssText = 'padding:16px; margin-bottom:12px;';
+  const chartTitle = document.createElement('div');
+  chartTitle.className = 'card-title';
+  chartTitle.textContent = 'Income vs Spending';
+  chartCard.appendChild(chartTitle);
+
+  monthStats.forEach(ms => {
+    const group = document.createElement('div');
+    group.className = 'analysis-month-group';
+
+    const monthLabel = document.createElement('div');
+    monthLabel.className = 'analysis-month-title';
+    monthLabel.textContent = monthKeyToLabel(ms.month);
+    group.appendChild(monthLabel);
+
+    // Income bar
+    group.appendChild(_makeBarRow('Income', ms.income, maxAmt, 'income', 'positive'));
+    // Spending bar
+    group.appendChild(_makeBarRow('Spending', ms.spending, maxAmt, 'spending', 'negative'));
+
+    // Net line
+    const netDiv = document.createElement('div');
+    netDiv.style.cssText = 'font-size:0.78rem;text-align:right;margin-top:3px;color:var(--on-surface-var);';
+    const cls = ms.net >= 0 ? 'positive' : 'negative';
+    netDiv.innerHTML = `Net: <span class="${cls}" style="font-weight:700;">${fmtMoney(ms.net, true)}</span>`;
+    group.appendChild(netDiv);
+
+    chartCard.appendChild(group);
+  });
+
+  chartEl.appendChild(chartCard);
+
+  // Category totals over the full range
+  const catTotals = {};
+  monthlyData.forEach(md => {
+    md.transactions.forEach(t => {
+      if (_analysisDeselectedCats.has(t.category_uid)) return;
+      if (!catTotals[t.category_uid]) catTotals[t.category_uid] = 0;
+      catTotals[t.category_uid] += t.amount;
+    });
+  });
+
+  const catEntries = Object.entries(catTotals)
+    .map(([uid, amount]) => ({ cat: categories.find(c => c.uid === uid), amount }))
+    .filter(e => e.cat);
+
+  if (catEntries.length === 0) return;
+
+  const tableCard = document.createElement('div');
+  tableCard.className = 'card';
+  tableCard.style.cssText = 'padding:0 8px;';
+
+  const incomeCats = catEntries.filter(e => e.cat.is_positive).sort((a, b) => b.amount - a.amount);
+  const spendCats  = catEntries.filter(e => !e.cat.is_positive).sort((a, b) => a.amount - b.amount);
+
+  function appendCatSection(title, entries) {
+    if (entries.length === 0) return;
+    const header = document.createElement('div');
+    header.className = 'summary-section-title';
+    header.style.cssText = 'padding:12px 8px 4px;';
+    header.textContent = title;
+    tableCard.appendChild(header);
+    entries.forEach(e => {
+      const row = document.createElement('div');
+      row.className = 'cat-row';
+      row.style.cursor = 'default';
+      row.innerHTML = `
+        <span class="cat-name">${e.cat.name}</span>
+        <span class="cat-amounts">
+          <span class="cat-actual ${e.cat.is_positive ? 'positive' : 'negative'}">${fmtMoney(Math.abs(e.amount))}</span>
+        </span>`;
+      tableCard.appendChild(row);
+    });
+  }
+
+  appendCatSection('Income by Category', incomeCats);
+  appendCatSection('Spending by Category', spendCats);
+  summaryEl.appendChild(tableCard);
+}
+
+function _makeBarRow(labelText, amount, maxAmt, fillClass, amtClass) {
+  const row = document.createElement('div');
+  row.className = 'analysis-bar-row';
+
+  const lbl = document.createElement('span');
+  lbl.className = 'analysis-bar-label';
+  lbl.textContent = labelText;
+
+  const track = document.createElement('div');
+  track.className = 'analysis-bar-track';
+  const fill = document.createElement('div');
+  fill.className = `analysis-bar-fill ${fillClass}`;
+  fill.style.width = `${Math.max(Math.round(amount / maxAmt * 100), amount > 0 ? 1 : 0)}%`;
+  track.appendChild(fill);
+
+  const amt = document.createElement('span');
+  amt.className = `analysis-bar-amount ${amtClass}`;
+  amt.textContent = fmtMoney(amount);
+
+  row.appendChild(lbl);
+  row.appendChild(track);
+  row.appendChild(amt);
+  return row;
+}
 
 /* ========================================================================= */
 /* Boot                                                                       */
