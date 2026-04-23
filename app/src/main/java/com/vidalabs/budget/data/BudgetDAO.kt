@@ -62,15 +62,22 @@ interface BudgetDao {
         c.isPositive AS isPositive,
         COALESCE(b.value, 0) AS budget,
         CASE
-            WHEN c.isPositive = 1 THEN COALESCE(SUM(r.amount), 0)
-            ELSE COALESCE(SUM(-r.amount), 0)
+            WHEN c.isPositive = 1 THEN COALESCE(SUM(combined.amount), 0)
+            ELSE COALESCE(SUM(-combined.amount), 0)
         END AS actual
     FROM categories c
-    LEFT JOIN receipts r
-        ON r.categoryUid = c.uid
-       AND r.deleted = 0
-       AND r.epochDay >= :startEpochDay
-       AND r.epochDay < :endEpochDay
+    LEFT JOIN (
+        SELECT uid, categoryUid, amount FROM receipts
+        WHERE deleted = 0 AND recurrenceId IS NULL
+          AND epochDay >= :startEpochDay AND epochDay < :endEpochDay
+        UNION ALL
+        SELECT r.uid, r.categoryUid, r.amount FROM receipts r
+        JOIN recurrence rec ON rec.id = r.recurrenceId
+        JOIN validity_lookup vl ON vl.recurrenceId = rec.id
+        WHERE r.deleted = 0
+          AND r.recurrenceId IS NOT NULL
+          AND vl.targetMonth = :startEpochDay AND vl.isActive = 1
+    ) combined ON combined.categoryUid = c.uid
     LEFT JOIN budgetitems b
         ON b.categoryUid = c.uid
        AND b.monthKey = :monthKey
@@ -238,9 +245,24 @@ interface BudgetDao {
     FROM receipts r
     WHERE r.deleted = 0
       AND r.categoryUid = :categoryUid
+      AND r.recurrenceId IS NULL
       AND r.epochDay >= :startEpochDay
       AND r.epochDay < :endEpochDay
-    ORDER BY r.epochDay DESC, r.updatedAt DESC
+    UNION ALL
+    SELECT
+        r.uid AS uid,
+        vl.targetMonth AS epochDay,
+        r.amount AS amount,
+        r.description AS description
+    FROM receipts r
+    JOIN recurrence rec ON rec.id = r.recurrenceId
+    JOIN validity_lookup vl ON vl.recurrenceId = rec.id
+    WHERE r.deleted = 0
+      AND r.categoryUid = :categoryUid
+      AND r.recurrenceId IS NOT NULL
+      AND vl.targetMonth = :startEpochDay
+      AND vl.isActive = 1
+    ORDER BY epochDay DESC
     """
     )
     fun observeReceiptsForCategoryInRange(
@@ -257,14 +279,34 @@ interface BudgetDao {
         r.amount AS amount,
         r.description AS description,
         c.name AS categoryName,
-        c.isPositive AS isPositive
+        c.isPositive AS isPositive,
+        r.recurrenceId AS recurrenceId
     FROM receipts r
     JOIN categories c ON c.uid = r.categoryUid
     WHERE r.deleted = 0
       AND c.deleted = 0
+      AND r.recurrenceId IS NULL
       AND r.epochDay >= :startEpochDay
       AND r.epochDay < :endEpochDay
-    ORDER BY r.epochDay DESC, r.updatedAt DESC
+    UNION ALL
+    SELECT
+        r.uid AS uid,
+        vl.targetMonth AS epochDay,
+        r.amount AS amount,
+        r.description AS description,
+        c.name AS categoryName,
+        c.isPositive AS isPositive,
+        r.recurrenceId AS recurrenceId
+    FROM receipts r
+    JOIN categories c ON c.uid = r.categoryUid
+    JOIN recurrence rec ON rec.id = r.recurrenceId
+    JOIN validity_lookup vl ON vl.recurrenceId = rec.id
+    WHERE r.deleted = 0
+      AND c.deleted = 0
+      AND r.recurrenceId IS NOT NULL
+      AND vl.targetMonth = :startEpochDay
+      AND vl.isActive = 1
+    ORDER BY epochDay DESC
     """
     )
     fun observeAllReceiptsInRange(
@@ -280,7 +322,8 @@ interface BudgetDao {
         r.amount AS amount,
         r.description AS description,
         c.name AS categoryName,
-        c.isPositive AS isPositive
+        c.isPositive AS isPositive,
+        r.recurrenceId AS recurrenceId
     FROM receipts r
     JOIN categories c ON c.uid = r.categoryUid
     WHERE r.deleted = 0
@@ -289,5 +332,61 @@ interface BudgetDao {
     """
     )
     suspend fun getAllTransactions(): List<TransactionRow>
+
+    // --- Recurrence ---
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertRecurrence(rec: RecurrenceEntity)
+
+    @Query("SELECT * FROM recurrence WHERE id = :id LIMIT 1")
+    suspend fun getRecurrenceById(id: String): RecurrenceEntity?
+
+    @Query("SELECT * FROM recurrence WHERE receiptId = :receiptId LIMIT 1")
+    suspend fun getRecurrenceForReceipt(receiptId: String): RecurrenceEntity?
+
+    @Query("SELECT * FROM recurrence")
+    suspend fun getAllRecurrences(): List<RecurrenceEntity>
+
+    @Query("DELETE FROM recurrence WHERE id = :id")
+    suspend fun deleteRecurrence(id: String)
+
+    // --- ValidityLookup ---
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertValidityLookupIfAbsent(entry: ValidityLookupEntity)
+
+    @Query("SELECT * FROM validity_lookup WHERE recurrenceId = :recurrenceId")
+    suspend fun getValidityLookupForRecurrence(recurrenceId: String): List<ValidityLookupEntity>
+
+    @Query(
+        """
+    SELECT * FROM validity_lookup
+    WHERE recurrenceId = :recurrenceId AND targetMonth = :targetMonth
+    LIMIT 1
+    """
+    )
+    suspend fun getValidityLookupEntry(recurrenceId: String, targetMonth: Long): ValidityLookupEntity?
+
+    @Query(
+        """
+    UPDATE validity_lookup SET isActive = :isActive
+    WHERE recurrenceId = :recurrenceId AND targetMonth = :targetMonth
+    """
+    )
+    suspend fun setValidityLookupActive(recurrenceId: String, targetMonth: Long, isActive: Boolean)
+
+    @Query("DELETE FROM validity_lookup WHERE recurrenceId = :recurrenceId")
+    suspend fun deleteValidityLookupForRecurrence(recurrenceId: String)
+
+    @Query("DELETE FROM validity_lookup WHERE id = :id")
+    suspend fun deleteValidityLookupById(id: String)
+
+    @Query(
+        """
+    SELECT * FROM validity_lookup
+    WHERE targetMonth = :targetMonth AND isActive = 1
+    """
+    )
+    suspend fun getActiveValidityLookupsForMonth(targetMonth: Long): List<ValidityLookupEntity>
 
 }

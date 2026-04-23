@@ -1,6 +1,8 @@
-from typing import List
+from typing import List, Optional
+import calendar
+from datetime import date as _date, timedelta as _td
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 import models
@@ -9,10 +11,126 @@ from database import get_db
 
 router = APIRouter(prefix="/receipts", tags=["receipts"])
 
+_EPOCH_ORIGIN = _date(1970, 1, 1)
+
 
 @router.get("/", response_model=List[schemas.ReceiptResponse])
-def list_receipts(db: Session = Depends(get_db)):
-    return db.query(models.Receipt).all()
+def list_receipts(
+    start_epoch_day: Optional[int] = Query(None, alias="startEpochDay"),
+    end_epoch_day: Optional[int] = Query(None, alias="endEpochDay"),
+    target_month: Optional[int] = Query(None, alias="targetMonth"),
+    db: Session = Depends(get_db),
+):
+    """
+    List receipts.
+
+    - Without parameters: returns all non-deleted receipts.
+    - With startEpochDay + endEpochDay: returns receipts in that date range
+      (recurring receipts are not included; use targetMonth for that).
+    - With targetMonth (epochDay of the first day of a month): returns receipts
+      for that month, including recurring receipts whose validity_lookup entry is
+      active for the supplied targetMonth.
+      - Regular (non-recurring) receipts are only included when their epochDay
+        falls within the effective date range for that month (or within the
+        explicitly supplied startEpochDay/endEpochDay if provided).
+      - Recurring receipts are included solely via the validity_lookup join for
+        the supplied targetMonth.  Their occurrenceEpochDay is computed from the
+        recurrence rule for that month: for MONTHLY recurrences it is the
+        day-of-period clamped to the last valid day of the month; for other
+        frequencies it defaults to the first day of the target month.
+      - When targetMonth is combined with startEpochDay/endEpochDay, the explicit
+        range affects only regular receipts; recurring receipts are still included
+        based on validity_lookup activity for targetMonth regardless of range.
+    """
+    if target_month is not None:
+        # Determine range from targetMonth if not explicitly provided
+        if start_epoch_day is None:
+            start_epoch_day = target_month
+        if end_epoch_day is None:
+            # Compute first day of next month
+            base = _EPOCH_ORIGIN + _td(days=target_month)
+            if base.month == 12:
+                next_month_first = _date(base.year + 1, 1, 1)
+            else:
+                next_month_first = _date(base.year, base.month + 1, 1)
+            end_epoch_day = (next_month_first - _EPOCH_ORIGIN).days
+
+        # Regular (non-recurring) receipts that fall in the date range
+        regular_uids = {
+            r.uid
+            for r in db.query(models.Receipt.uid)
+            .filter(
+                models.Receipt.deleted == False,  # noqa: E712
+                models.Receipt.recurrenceId == None,  # noqa: E711
+                models.Receipt.epochDay >= start_epoch_day,
+                models.Receipt.epochDay < end_epoch_day,
+            )
+            .all()
+        }
+
+        # Recurring receipt UIDs active in the target month, along with their
+        # recurrence metadata for computing the occurrence date.
+        recurring_rows = (
+            db.query(
+                models.Recurrence.receiptId,
+                models.Recurrence.frequency,
+                models.Recurrence.dayOfPeriod,
+            )
+            .join(
+                models.ValidityLookup,
+                models.ValidityLookup.recurrenceId == models.Recurrence.id,
+            )
+            .filter(
+                models.ValidityLookup.targetMonth == target_month,
+                models.ValidityLookup.isActive == True,  # noqa: E712
+            )
+            .all()
+        )
+        # Map receiptId → (frequency, dayOfPeriod) for occurrence-date computation
+        recurring_uid_to_rec = {r.receiptId: (r.frequency, r.dayOfPeriod) for r in recurring_rows}
+        recurring_uids = set(recurring_uid_to_rec.keys())
+
+        all_uids = regular_uids | recurring_uids
+        if not all_uids:
+            return []
+
+        receipts = (
+            db.query(models.Receipt)
+            .filter(
+                models.Receipt.uid.in_(all_uids),
+                models.Receipt.deleted == False,  # noqa: E712
+            )
+            .all()
+        )
+
+        # Build response: recurring receipts get a computed occurrenceEpochDay so
+        # clients always receive an in-range date for display/ordering.
+        _base = _EPOCH_ORIGIN + _td(days=target_month)  # first day of target month
+
+        responses = []
+        for r in receipts:
+            resp = schemas.ReceiptResponse.model_validate(r)
+            if r.uid in recurring_uid_to_rec:
+                freq, day_of_period = recurring_uid_to_rec[r.uid]
+                if freq == "MONTHLY":
+                    # Clamp day to the actual length of the target month
+                    max_day = calendar.monthrange(_base.year, _base.month)[1]
+                    occ_day = min(day_of_period, max_day)
+                    occ_date = _date(_base.year, _base.month, occ_day)
+                    resp.occurrenceEpochDay = (occ_date - _EPOCH_ORIGIN).days
+                else:
+                    # For DAILY / WEEKLY / BI_WEEKLY use the start of the target month
+                    resp.occurrenceEpochDay = target_month
+            responses.append(resp)
+        return responses
+
+    # Plain date-range filter (no recurring lookup)
+    query = db.query(models.Receipt).filter(models.Receipt.deleted == False)  # noqa: E712
+    if start_epoch_day is not None:
+        query = query.filter(models.Receipt.epochDay >= start_epoch_day)
+    if end_epoch_day is not None:
+        query = query.filter(models.Receipt.epochDay < end_epoch_day)
+    return query.all()
 
 
 @router.post("/", response_model=schemas.ReceiptResponse)

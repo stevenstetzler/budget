@@ -3,6 +3,7 @@ package com.vidalabs.budget.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vidalabs.budget.data.CategoryEntity
+import com.vidalabs.budget.data.RecurrenceEntity
 import com.vidalabs.budget.data.SummaryTotals
 import com.vidalabs.budget.repo.BudgetRepository
 import com.vidalabs.budget.data.BudgetRow
@@ -333,6 +334,104 @@ class BudgetViewModel(
                     )
                 }
             }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Recurrence
+    // -------------------------------------------------------------------------
+
+    /**
+     * Loads the recurrence (if any) for the given receipt UID.
+     * Result is emitted into [recurrenceForReceipt].
+     */
+    private val _recurrenceForReceipt = MutableStateFlow<RecurrenceEntity?>(null)
+    val recurrenceForReceipt: StateFlow<RecurrenceEntity?> = _recurrenceForReceipt.asStateFlow()
+
+    fun loadRecurrenceForReceipt(receiptUid: String) {
+        viewModelScope.launch {
+            _recurrenceForReceipt.value = repo.getRecurrenceForReceipt(receiptUid)
+        }
+    }
+
+    fun clearRecurrenceForReceipt() {
+        _recurrenceForReceipt.value = null
+    }
+
+    /**
+     * Create or update a recurrence for the given receipt.
+     */
+    fun upsertRecurrence(
+        receiptId: String,
+        frequency: String,
+        startDate: Long,
+        endDate: Long?,
+        dayOfPeriod: Int,
+        existingId: String? = null
+    ) {
+        viewModelScope.launch {
+            val rec = repo.upsertRecurrence(
+                receiptId = receiptId,
+                frequency = frequency,
+                startDate = startDate,
+                endDate = endDate,
+                dayOfPeriod = dayOfPeriod,
+                existingId = existingId
+            )
+            _recurrenceForReceipt.value = rec
+        }
+    }
+
+    /**
+     * Remove the recurrence from a receipt (make it a one-time transaction).
+     *
+     * When [receiptEpochDay] / [receiptAmountPositive] / [receiptDescription] /
+     * [receiptCategoryName] are all provided the receipt is updated atomically as
+     * part of the removal, restoring it to its original date and any edited fields.
+     */
+    fun removeRecurrence(
+        recurrenceId: String,
+        receiptEpochDay: Long? = null,
+        receiptAmountPositive: Double? = null,
+        receiptDescription: String? = null,
+        receiptCategoryName: String? = null,
+    ) {
+        viewModelScope.launch {
+            repo.removeRecurrence(
+                recurrenceId = recurrenceId,
+                receiptEpochDay = receiptEpochDay,
+                receiptAmountPositive = receiptAmountPositive,
+                receiptDescription = receiptDescription,
+                receiptCategoryName = receiptCategoryName,
+            )
+            _recurrenceForReceipt.value = null
+            _recurrenceActiveForMonth.value = true
+        }
+    }
+
+    // Tracks whether the current recurring receipt is active in the selected month.
+    private val _recurrenceActiveForMonth = MutableStateFlow(true)
+    val recurrenceActiveForMonth: StateFlow<Boolean> = _recurrenceActiveForMonth.asStateFlow()
+
+    fun loadRecurrenceActiveForMonth(recurrenceId: String) {
+        val ym = _selectedMonth.value
+        val targetMonth = ym.atDay(1).toEpochDay()
+        viewModelScope.launch {
+            // Default to true; setRecurrenceActiveForMonth handles creating the entry
+            _recurrenceActiveForMonth.value = repo.getValidityLookupIsActive(recurrenceId, targetMonth)
+        }
+    }
+
+    /**
+     * Toggle whether a recurring receipt appears in the currently selected month.
+     * [isActive] = false means the receipt is skipped for that month.
+     */
+    fun setRecurrenceActiveForMonth(recurrenceId: String, isActive: Boolean) {
+        _recurrenceActiveForMonth.value = isActive
+        viewModelScope.launch {
+            val ym = _selectedMonth.value
+            val targetMonth = ym.atDay(1).toEpochDay()
+            repo.setRecurrenceActiveForMonth(recurrenceId, targetMonth, isActive)
         }
     }
 

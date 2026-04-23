@@ -382,6 +382,7 @@
     }
     .badge-income  { background: var(--success-bg); color: var(--success); }
     .badge-expense { background: var(--error-bg);   color: var(--error);   }
+    .badge-recurring { background: var(--primary-light); color: var(--primary); }
 
     .txn-date { font-size: 0.8rem; color: var(--on-surface-var); }
     .txn-amount { margin-left: auto; font-size: 1.1rem; font-weight: 700; }
@@ -484,6 +485,38 @@
       cursor: pointer;
       letter-spacing: 0;
     }
+
+    /* Toggle row (checkbox + label inline) */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .toggle-row input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      margin: 0;
+      cursor: pointer;
+    }
+    .toggle-row label {
+      display: inline;
+      margin: 0;
+      cursor: pointer;
+      font-size: 0.95rem;
+      font-weight: 500;
+      text-transform: none;
+      letter-spacing: normal;
+      color: var(--on-surface);
+    }
+
+    /* Recurrence sub-section inside edit modal */
+    .recurrence-section {
+      border: 1px solid var(--outline-light);
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 8px;
+    }
+    .recurrence-section .form-group:last-child { margin-bottom: 0; }
 
     /* Preferences */
     .pref-section { margin-bottom: 24px; }
@@ -771,6 +804,33 @@
     <div class="form-group">
       <label for="edit-txn-description">Description</label>
       <input type="text" id="edit-txn-description" maxlength="200" />
+    </div>
+    <div class="form-group">
+      <div class="toggle-row">
+        <input type="checkbox" id="edit-txn-recurring" />
+        <label for="edit-txn-recurring">Recurring</label>
+      </div>
+      <div id="recurrence-options" class="recurrence-section" style="display:none;">
+        <div class="form-group">
+          <label for="edit-rec-frequency">Frequency</label>
+          <select id="edit-rec-frequency">
+            <option value="MONTHLY">Monthly</option>
+            <option value="WEEKLY">Weekly</option>
+            <option value="BI_WEEKLY">Every 2 Weeks</option>
+            <option value="DAILY">Daily</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="edit-rec-end-date">End Date (optional)</label>
+          <input type="date" id="edit-rec-end-date" />
+        </div>
+      </div>
+      <div id="recurrence-active-section" style="display:none; margin-top:8px;">
+        <div class="toggle-row">
+          <input type="checkbox" id="edit-rec-active-month" />
+          <label for="edit-rec-active-month">Active in <span id="edit-rec-month-label" style="font-weight:700;"></span></label>
+        </div>
+      </div>
     </div>
     <div class="modal-actions-split">
       <button class="btn btn-danger" id="btn-delete-txn">Delete</button>
@@ -1277,10 +1337,12 @@ async function renderReceipts() {
   txns.forEach(t => {
     const card = document.createElement('div');
     card.className = 'txn-card';
+    const recurBadge = t.recurrence_id ? `<span class="txn-badge badge-recurring">recurring</span>` : '';
     card.innerHTML = `
       <div class="txn-top">
         <span class="txn-cat-name">${t.category_name}</span>
         <span class="txn-badge ${t.is_positive ? 'badge-income' : 'badge-expense'}">${t.is_positive ? 'income' : 'expense'}</span>
+        ${recurBadge}
         <span class="txn-date">${epochDayToStr(t.epoch_day)}</span>
         <span class="txn-amount ${t.amount >= 0 ? 'positive' : 'negative'}">${fmtMoney(Math.abs(t.amount))}</span>
       </div>
@@ -1295,14 +1357,91 @@ async function renderReceipts() {
 /* Edit transaction modal                                              */
 /* ------------------------------------------------------------------ */
 
-function openEditModal(txn) {
+// State for the currently-open edit modal
+let _editTxn = null;
+let _editRec = null;
+
+function monthKeyToFirstEpochDay(mk) {
+  const y = Math.floor(mk / 100);
+  const m = mk % 100;
+  return dateToEpochDay(`${y}-${String(m).padStart(2, '0')}-01`);
+}
+
+function monthKeyToLastEpochDay(mk) {
+  const y = Math.floor(mk / 100);
+  const m = mk % 100;
+  // Date.UTC(y, m, 0): day 0 of the next month (0-indexed m) = last day of current month (1-indexed)
+  return Math.floor(Date.UTC(y, m, 0) / 86400000);
+}
+
+function generateUuid() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
+
+async function openEditModal(txn) {
+  _editTxn = txn;
+  _editRec = null;
+
   document.getElementById('edit-txn-uid').value = txn.uid;
   document.getElementById('edit-txn-date').value = epochDayToDate(txn.epoch_day).toISOString().split('T')[0];
   populateCategorySelect(document.getElementById('edit-txn-category'), txn.category_uid);
   document.getElementById('edit-txn-amount').value = Math.abs(txn.amount).toFixed(2);
   document.getElementById('edit-txn-description').value = txn.description || '';
+
+  // Reset recurrence UI
+  document.getElementById('edit-txn-recurring').checked = false;
+  document.getElementById('recurrence-options').style.display = 'none';
+  document.getElementById('recurrence-active-section').style.display = 'none';
+  document.getElementById('edit-rec-end-date').value = '';
+  document.getElementById('edit-rec-frequency').value = 'MONTHLY';
+
+  // Load existing recurrence if any
+  if (txn.recurrence_id) {
+    try {
+      const rec = await apiFetch(`/recurrences/${txn.uid}`);
+      if (rec) {
+        _editRec = rec;
+        document.getElementById('edit-txn-recurring').checked = true;
+        document.getElementById('recurrence-options').style.display = 'block';
+        document.getElementById('edit-rec-frequency').value = rec.frequency || 'MONTHLY';
+        if (rec.start_date !== null && rec.start_date !== undefined) {
+          // Show the original start date, not the occurrence/targetMonth date, so
+          // saving without touching the date doesn't rewrite the recurrence start.
+          document.getElementById('edit-txn-date').value =
+            epochDayToDate(rec.start_date).toISOString().split('T')[0];
+        }
+        if (rec.end_date !== null && rec.end_date !== undefined) {
+          document.getElementById('edit-rec-end-date').value =
+            epochDayToDate(rec.end_date).toISOString().split('T')[0];
+        }
+        // Show active-in-month toggle for existing recurrences
+        const mk = state.receipts.month;
+        const targetEpoch = monthKeyToFirstEpochDay(mk);
+        document.getElementById('edit-rec-month-label').textContent = monthKeyToLabel(mk);
+        document.getElementById('recurrence-active-section').style.display = 'block';
+        const statusResp = await apiFetch(`/recurrences/${rec.id}/months/${targetEpoch}`);
+        document.getElementById('edit-rec-active-month').checked = statusResp.is_active;
+      }
+    } catch (e) {
+      console.error('Failed to load recurrence for transaction', txn.uid, e);
+      // Proceed with modal open; recurrence features will be unavailable
+    }
+  }
+
   openModal('modal-edit-txn');
 }
+
+// Show/hide recurrence options when the Recurring checkbox is toggled
+document.getElementById('edit-txn-recurring').addEventListener('change', function () {
+  document.getElementById('recurrence-options').style.display = this.checked ? 'block' : 'none';
+  if (!this.checked) document.getElementById('recurrence-active-section').style.display = 'none';
+});
 
 document.getElementById('btn-edit-txn-cancel').addEventListener('click', () => closeModal('modal-edit-txn'));
 
@@ -1312,6 +1451,7 @@ document.getElementById('btn-edit-txn-save').addEventListener('click', async () 
   const catUid = document.getElementById('edit-txn-category').value;
   const amt    = parseFloat(document.getElementById('edit-txn-amount').value);
   const desc   = document.getElementById('edit-txn-description').value.trim() || null;
+  const isRecurring = document.getElementById('edit-txn-recurring').checked;
 
   if (!dateV || !catUid || isNaN(amt) || amt <= 0) {
     showSnackbar('Please fill in all required fields');
@@ -1320,17 +1460,75 @@ document.getElementById('btn-edit-txn-save').addEventListener('click', async () 
 
   const cat = categories.find(c => c.uid === catUid);
   const signedAmount = cat.is_positive ? Math.abs(amt) : -Math.abs(amt);
+  const startEpoch = dateToEpochDay(dateV);
 
   try {
     await apiFetch(`/transactions/${uid}`, {
       method: 'PUT',
       body: JSON.stringify({
-        epoch_day: dateToEpochDay(dateV),
+        epoch_day: startEpoch,
         amount: signedAmount,
         category_uid: catUid,
         description: desc,
       }),
     });
+
+    if (isRecurring) {
+      const freq = document.getElementById('edit-rec-frequency').value;
+      const endDateStr = document.getElementById('edit-rec-end-date').value;
+      const endEpoch = endDateStr ? dateToEpochDay(endDateStr) : null;
+      // day_of_period: day of month for MONTHLY, else 1
+      const txnDate = new Date(dateV + 'T00:00:00Z');
+      const dayOfPeriod = freq === 'MONTHLY' ? txnDate.getUTCDate() : 1;
+      const recId = _editRec ? _editRec.id : generateUuid();
+
+      await apiFetch('/recurrences', {
+        method: 'POST',
+        body: JSON.stringify({
+          id: recId,
+          receipt_id: uid,
+          frequency: freq,
+          start_date: startEpoch,
+          end_date: endEpoch,
+          day_of_period: dayOfPeriod,
+        }),
+      });
+
+      // Save active-in-month toggle (only relevant if editing an existing recurrence)
+      if (_editRec) {
+        const mk = state.receipts.month;
+        const targetEpoch = monthKeyToFirstEpochDay(mk);
+        const isActive = document.getElementById('edit-rec-active-month').checked;
+        await apiFetch(`/recurrences/${recId}/months/${targetEpoch}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ is_active: isActive }),
+        });
+      }
+    } else if (_editRec) {
+      // User un-ticked Recurring — prompt before removing
+      const mk = state.receipts.month;
+      const monthLabel = monthKeyToLabel(mk);
+      const setEndDate = confirm(
+        `Set end date to ${monthLabel} to keep the receipt in this + previous months (OK),\nor remove the recurrence entirely and keep only the original instance (Cancel)?`
+      );
+      if (setEndDate) {
+        const lastEpoch = monthKeyToLastEpochDay(mk);
+        await apiFetch('/recurrences', {
+          method: 'POST',
+          body: JSON.stringify({
+            id: _editRec.id,
+            receipt_id: uid,
+            frequency: _editRec.frequency,
+            start_date: _editRec.start_date,
+            end_date: lastEpoch,
+            day_of_period: _editRec.day_of_period,
+          }),
+        });
+      } else {
+        await apiFetch(`/recurrences/${_editRec.id}`, { method: 'DELETE' });
+      }
+    }
+
     closeModal('modal-edit-txn');
     showSnackbar('Transaction updated');
     renderReceipts();
@@ -1343,6 +1541,10 @@ document.getElementById('btn-delete-txn').addEventListener('click', async () => 
   if (!confirm('Delete this transaction?')) return;
   const uid = document.getElementById('edit-txn-uid').value;
   try {
+    // Delete associated recurrence first if present
+    if (_editRec) {
+      await apiFetch(`/recurrences/${_editRec.id}`, { method: 'DELETE' });
+    }
     await apiFetch(`/transactions/${uid}`, { method: 'DELETE' });
     closeModal('modal-edit-txn');
     showSnackbar('Transaction deleted');
