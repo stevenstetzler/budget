@@ -1509,7 +1509,7 @@ document.getElementById('btn-edit-txn-save').addEventListener('click', async () 
       const mk = state.receipts.month;
       const monthLabel = monthKeyToLabel(mk);
       const setEndDate = confirm(
-        `Set end date to ${monthLabel} to keep the receipt in previous months (OK),\nor remove the recurrence entirely and keep only the original instance (Cancel)?`
+        `Set end date to ${monthLabel} to keep the receipt in this + previous months (OK),\nor remove the recurrence entirely and keep only the original instance (Cancel)?`
       );
       if (setEndDate) {
         const lastEpoch = monthKeyToLastEpochDay(mk);
