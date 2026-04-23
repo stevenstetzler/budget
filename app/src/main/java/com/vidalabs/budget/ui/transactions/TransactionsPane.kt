@@ -261,6 +261,11 @@ private fun EditTransactionDialog(
         if (rec != null) {
             recurrenceFrequency = rec.frequency
             recurrenceEndDate = rec.endDate?.let { LocalDate.ofEpochDay(it) }
+            // Default the date field to the recurrence's actual start date, not the
+            // virtual occurrence date (vl.targetMonth). Without this, pressing Save
+            // from a future occurrence month would silently move the receipt's epochDay
+            // and the recurrence's startDate to the occurrence month.
+            date = LocalDate.ofEpochDay(rec.startDate)
         }
     }
 
