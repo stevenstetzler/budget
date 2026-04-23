@@ -121,6 +121,27 @@ def test_post_transaction_import_payload_reuses_existing_category(client):
     assert imported_txn["amount"] == 100.0
 
 
+def test_post_transaction_with_date_and_category_uid(client):
+    """Date-based payloads work even when category UID is provided directly."""
+    categories = client.get("/budget/api/categories").get_json()
+    category_uid = next(c["uid"] for c in categories if c["name"] == "test-category")
+
+    payload = {
+        "date": "2026-03-03",
+        "amount": 20.0,
+        "description": "Imported with uid",
+        "category_uid": category_uid,
+    }
+    response = client.post("/budget/api/transactions", json=payload)
+    assert response.status_code == 201
+
+    transactions = client.get("/budget/api/transactions").get_json()
+    imported_txn = next(t for t in transactions if t["description"] == "Imported with uid")
+    assert imported_txn["epoch_day"] == 20515
+    assert imported_txn["category_uid"] == category_uid
+    assert imported_txn["amount"] == -20.0
+
+
 def test_put_budget_item(client):
     """PUT /budget/api/budget-items inserts a row into the budget_items table."""
     categories = client.get("/budget/api/categories").get_json()

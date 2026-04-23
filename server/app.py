@@ -110,6 +110,11 @@ def _epoch_day_for_month_key(month_key: int) -> tuple[int, int]:
 
 
 def _epoch_day_from_date_str(value: str) -> int | None:
+    """Convert a date string to Unix epoch day.
+
+    Supported input formats are ISO (`YYYY-MM-DD`), `%m/%d/%Y`, and `%m-%d-%Y`.
+    Returns `None` when parsing fails.
+    """
     text = (value or "").strip()
     if not text:
         return None
@@ -135,6 +140,7 @@ def _epoch_day_from_date_str(value: str) -> int | None:
 
 
 def _get_or_create_category_uid(name: str, is_positive_if_create: bool) -> tuple[str, bool]:
+    """Get an active category by name or create it and return `(uid, is_positive)`."""
     db = get_db()
     existing = db.execute(
         "SELECT uid, is_positive FROM categories WHERE name = ? AND deleted = 0 LIMIT 1",
@@ -229,6 +235,7 @@ def create_transaction():
     category_name = (data.get("category") or "").strip()
     is_positive_category = bool(data.get("isPositive"))
     used_import_fields = False
+    category_is_positive = None
 
     if epoch_day is None and "date" in data:
         epoch_day = _epoch_day_from_date_str(str(data.get("date") or ""))
@@ -244,8 +251,8 @@ def create_transaction():
     if epoch_day is None or amount is None or not category_uid:
         return jsonify({"error": "epoch_day, amount, and category_uid are required"}), 400
 
-    if not used_import_fields:
-        db = get_db()
+    db = get_db()
+    if category_is_positive is None:
         cat = db.execute(
             "SELECT uid, is_positive FROM categories WHERE uid = ? AND deleted = 0",
             (category_uid,),
@@ -253,8 +260,6 @@ def create_transaction():
         if not cat:
             return jsonify({"error": "category not found"}), 404
         category_is_positive = bool(cat["is_positive"])
-    else:
-        db = get_db()
 
     uid = str(uuid.uuid4())
     now = _now_ms()
