@@ -10,7 +10,7 @@ import os
 import sqlite3
 import uuid
 import time
-from datetime import date
+from datetime import date, datetime
 from flask import Flask, request, jsonify, g, send_from_directory
 from flask_cors import CORS
 
@@ -109,6 +109,50 @@ def _epoch_day_for_month_key(month_key: int) -> tuple[int, int]:
     return (first - epoch).days, (last - epoch).days
 
 
+def _epoch_day_from_date_str(value: str) -> int | None:
+    text = (value or "").strip()
+    if not text:
+        return None
+
+    parsed = None
+    try:
+        parsed = date.fromisoformat(text)
+    except ValueError:
+        pass
+
+    if parsed is None:
+        for fmt in ("%m/%d/%Y", "%m-%d-%Y"):
+            try:
+                parsed = datetime.strptime(text, fmt).date()
+                break
+            except ValueError:
+                continue
+
+    if parsed is None:
+        return None
+
+    return (parsed - date(1970, 1, 1)).days
+
+
+def _get_or_create_category_uid(name: str, is_positive_if_create: bool) -> tuple[str, bool]:
+    db = get_db()
+    existing = db.execute(
+        "SELECT uid, is_positive FROM categories WHERE name = ? AND deleted = 0 LIMIT 1",
+        (name,),
+    ).fetchone()
+    if existing:
+        return existing["uid"], bool(existing["is_positive"])
+
+    uid = str(uuid.uuid4())
+    now = _now_ms()
+    db.execute(
+        "INSERT INTO categories VALUES (?,?,?,?,?)",
+        (uid, name, 1 if is_positive_if_create else 0, now, 0),
+    )
+    db.commit()
+    return uid, bool(is_positive_if_create)
+
+
 # ---------------------------------------------------------------------------
 # Category endpoints
 # ---------------------------------------------------------------------------
@@ -182,23 +226,44 @@ def create_transaction():
     amount = data.get("amount")
     category_uid = data.get("category_uid")
     description = data.get("description") or None
+    category_name = (data.get("category") or "").strip()
+    is_positive_category = bool(data.get("isPositive"))
+    used_import_fields = False
+
+    if epoch_day is None and "date" in data:
+        epoch_day = _epoch_day_from_date_str(str(data.get("date") or ""))
+        used_import_fields = True
+
+    if not category_uid and category_name:
+        category_uid, resolved_is_positive = _get_or_create_category_uid(
+            category_name, is_positive_if_create=is_positive_category
+        )
+        category_is_positive = resolved_is_positive
+        used_import_fields = True
 
     if epoch_day is None or amount is None or not category_uid:
         return jsonify({"error": "epoch_day, amount, and category_uid are required"}), 400
 
-    db = get_db()
-    cat = db.execute(
-        "SELECT uid, is_positive FROM categories WHERE uid = ? AND deleted = 0",
-        (category_uid,),
-    ).fetchone()
-    if not cat:
-        return jsonify({"error": "category not found"}), 404
+    if not used_import_fields:
+        db = get_db()
+        cat = db.execute(
+            "SELECT uid, is_positive FROM categories WHERE uid = ? AND deleted = 0",
+            (category_uid,),
+        ).fetchone()
+        if not cat:
+            return jsonify({"error": "category not found"}), 404
+        category_is_positive = bool(cat["is_positive"])
+    else:
+        db = get_db()
 
     uid = str(uuid.uuid4())
     now = _now_ms()
+    receipt_amount = (
+        abs(float(amount)) if category_is_positive else -abs(float(amount))
+    ) if used_import_fields else float(amount)
     db.execute(
         "INSERT INTO receipts VALUES (?,?,?,?,?,?,?)",
-        (uid, int(epoch_day), float(amount), description, category_uid, now, 0),
+        (uid, int(epoch_day), receipt_amount, description, category_uid, now, 0),
     )
     db.commit()
     return jsonify({"uid": uid}), 201
