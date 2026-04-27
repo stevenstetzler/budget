@@ -571,6 +571,152 @@
       display: none;
     }
     .error-banner.show { display: block; }
+
+    /* ------------------------------------------------------------------ */
+    /* View toggle (Transactions / Analysis) in top bar                    */
+    /* ------------------------------------------------------------------ */
+    #view-toggle {
+      display: flex;
+      background: rgba(255,255,255,0.18);
+      border-radius: 20px;
+      padding: 2px;
+      flex-shrink: 0;
+    }
+    .view-btn {
+      background: none;
+      border: none;
+      color: rgba(255,255,255,0.80);
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 18px;
+      cursor: pointer;
+      letter-spacing: 0.03em;
+      transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+    .view-btn.active {
+      background: rgba(255,255,255,0.90);
+      color: var(--primary);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Analysis pane                                                       */
+    /* ------------------------------------------------------------------ */
+    #analysis-controls {
+      margin-bottom: 14px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    #analysis-range {
+      flex: 1;
+      min-width: 120px;
+    }
+
+    /* Category filter */
+    #cat-filter-wrap {
+      position: relative;
+      flex: 1;
+      min-width: 140px;
+    }
+    #cat-filter-btn {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #cat-filter-dropdown {
+      display: none;
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0; right: 0;
+      background: var(--surface);
+      border: 1px solid var(--outline-light);
+      border-radius: 10px;
+      z-index: 300;
+      max-height: 260px;
+      overflow-y: auto;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    }
+    #cat-filter-dropdown.open { display: block; }
+    .cf-item {
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--outline-light);
+    }
+    .cf-item:last-child { border-bottom: none; }
+    .cf-item label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      text-transform: none;
+      font-size: 0.88rem;
+      font-weight: 400;
+      cursor: pointer;
+      letter-spacing: normal;
+      color: var(--on-surface);
+    }
+    .cf-item.cf-select-all label {
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    /* Bar chart */
+    .analysis-group {
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--outline-light);
+    }
+    .analysis-group:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .analysis-group-title {
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--on-surface-var);
+      margin-bottom: 8px;
+    }
+    .bar-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 5px;
+    }
+    .bar-label {
+      width: 64px;
+      font-size: 0.78rem;
+      color: var(--on-surface-var);
+      flex-shrink: 0;
+    }
+    .bar-track {
+      flex: 1;
+      height: 18px;
+      background: var(--outline-light);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      min-width: 0;
+      transition: width 0.3s ease;
+    }
+    .bar-fill.income   { background: var(--success); }
+    .bar-fill.spending { background: var(--error); }
+    .bar-amount {
+      min-width: 72px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-align: right;
+      flex-shrink: 0;
+    }
+    .analysis-net {
+      font-size: 0.78rem;
+      text-align: right;
+      margin-top: 3px;
+      color: var(--on-surface-var);
+    }
   </style>
 </head>
 <body>
@@ -582,6 +728,10 @@
   <!-- ================================================================ -->
   <header id="topbar">
     <h1>Budget</h1>
+    <div id="view-toggle">
+      <button class="view-btn active" data-view="transactions">Transactions</button>
+      <button class="view-btn" data-view="analysis">Analysis</button>
+    </div>
     <button id="btn-prefs" title="Preferences" aria-label="Preferences">
       <!-- Settings gear icon -->
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -719,6 +869,44 @@
       </div>
 
       <div id="receipts-list"></div>
+
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- ANALYSIS pane (shown when Analysis view is active)            -->
+    <!-- ============================================================== -->
+    <section id="pane-analysis" class="pane">
+
+      <div class="month-row">
+        <button class="month-nav" id="analysis-prev">&#8249;</button>
+        <span class="month-label" id="analysis-month-label">–</span>
+        <button class="month-nav" id="analysis-next">&#8250;</button>
+      </div>
+
+      <div id="analysis-controls">
+        <select id="analysis-range">
+          <option value="1">This Month</option>
+          <option value="3">Last 3 Months</option>
+          <option value="6" selected>Last 6 Months</option>
+          <option value="12">Last Year</option>
+          <option value="0">All Time</option>
+        </select>
+        <div id="cat-filter-wrap">
+          <button class="btn btn-outlined" id="cat-filter-btn">
+            <span id="cat-filter-label">All Categories</span>
+            <span>&#9660;</span>
+          </button>
+          <div id="cat-filter-dropdown">
+            <div class="cf-item cf-select-all">
+              <label><input type="checkbox" id="cat-select-all" checked /> Select All</label>
+            </div>
+            <div id="cat-filter-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="analysis-chart"></div>
+      <div id="analysis-cat-totals"></div>
 
     </section>
 
@@ -916,17 +1104,13 @@ const LS_URL_KEY = 'budget_api_url';
 let apiBase = (localStorage.getItem(LS_URL_KEY) || '').replace(/\/$/, '');
 let categories = [];  // [{uid, name, is_positive}]
 
-// Per-pane month state (YYYYMM int)
+// Shared month state (YYYYMM int) — used across Summary, Budget, Receipts, and Analysis panes
 function currentMonthKey() {
   const now = new Date();
   return now.getFullYear() * 100 + (now.getMonth() + 1);
 }
 
-const state = {
-  summary:  { month: currentMonthKey() },
-  budget:   { month: currentMonthKey() },
-  receipts: { month: currentMonthKey() },
-};
+let sharedMonth = currentMonthKey();
 
 /* ========================================================================= */
 /* Utilities                                                                  */
@@ -1120,114 +1304,127 @@ document.getElementById('btn-new-cat-save').addEventListener('click', async () =
 /* ========================================================================= */
 
 document.getElementById('summary-prev').addEventListener('click', () => {
-  state.summary.month = prevMonth(state.summary.month);
+  sharedMonth = prevMonth(sharedMonth);
+  syncMonthLabels();
   renderSummary();
 });
 document.getElementById('summary-next').addEventListener('click', () => {
-  state.summary.month = nextMonth(state.summary.month);
+  sharedMonth = nextMonth(sharedMonth);
+  syncMonthLabels();
   renderSummary();
 });
 
 async function renderSummary() {
-  const mk = state.summary.month;
+  const mk = sharedMonth;
   document.getElementById('summary-month-label').textContent = monthKeyToLabel(mk);
-
-  const [txns, budgetItems] = await Promise.all([
-    loadTransactions(mk),
-    loadBudgetItems(mk),
-  ]);
-
-  // Compute totals
-  let totalIncome = 0, totalSpending = 0;
-  const catActuals = {};  // uid → sum (signed)
-  txns.forEach(t => {
-    catActuals[t.category_uid] = (catActuals[t.category_uid] || 0) + t.amount;
-    if (t.amount > 0) totalIncome += t.amount;
-    else totalSpending += Math.abs(t.amount);
-  });
-
-  const net = totalIncome - totalSpending;
-  document.getElementById('cf-income').textContent   = fmtMoney(totalIncome);
-  document.getElementById('cf-spending').textContent = fmtMoney(totalSpending);
-  const netEl = document.getElementById('cf-net');
-  netEl.textContent = fmtMoney(net, true);
-  netEl.className = 'cf-amount ' + (net >= 0 ? 'positive' : 'negative');
-
-  const budgetByUid = {};
-  budgetItems.forEach(b => { budgetByUid[b.category_uid] = b.value; });
-
-  // Group transactions by category for expand
-  const txnsByCategory = {};
-  txns.forEach(t => {
-    if (!txnsByCategory[t.category_uid]) txnsByCategory[t.category_uid] = [];
-    txnsByCategory[t.category_uid].push(t);
-  });
 
   const incomeList   = document.getElementById('summary-income-list');
   const spendingList = document.getElementById('summary-spending-list');
-  incomeList.innerHTML   = '';
+  incomeList.innerHTML   = '<div class="loading-row"><div class="spinner"></div></div>';
   spendingList.innerHTML = '';
 
-  const incomeCats   = categories.filter(c => c.is_positive);
-  const spendingCats = categories.filter(c => !c.is_positive);
+  try {
+    if (categories.length === 0) await loadCategories();
 
-  function buildCatRow(cat) {
-    const actual  = catActuals[cat.uid] || 0;
-    const budget  = budgetByUid[cat.uid] || 0;
-    const displayActual = Math.abs(actual);
-    const isOver  = budget > 0 && displayActual > budget;
-    const wrapper = document.createElement('div');
+    const [txns, budgetItems] = await Promise.all([
+      loadTransactions(mk),
+      loadBudgetItems(mk),
+    ]);
 
-    const row = document.createElement('div');
-    row.className = 'cat-row';
-    row.innerHTML = `
-      <span class="cat-name">${cat.name}</span>
-      <span class="cat-amounts">
-        <span class="cat-actual ${cat.is_positive ? 'positive' : (isOver ? 'negative' : '')}">${fmtMoney(displayActual)}</span>
-        ${budget ? `<span class="cat-budget">of ${fmtMoney(budget)}</span>` : ''}
-      </span>
-      <span class="cat-expand-icon">&#9660;</span>
-    `;
-
-    const txList = document.createElement('div');
-    txList.className = 'receipts-list';
-
-    const catTxns = txnsByCategory[cat.uid] || [];
-    if (catTxns.length === 0) {
-      txList.innerHTML = '<p style="font-size:0.8rem;color:var(--on-surface-var);padding:4px 0;">No transactions</p>';
-    } else {
-      catTxns.forEach(t => {
-        const item = document.createElement('div');
-        item.className = 'receipt-item';
-        item.innerHTML = `
-          <span class="receipt-date">${epochDayToStr(t.epoch_day)}</span>
-          <span class="receipt-desc">${t.description || ''}</span>
-          <span class="receipt-amt ${t.amount >= 0 ? 'positive' : 'negative'}">${fmtMoney(Math.abs(t.amount))}</span>
-        `;
-        txList.appendChild(item);
-      });
-    }
-
-    row.addEventListener('click', () => {
-      const open = txList.classList.toggle('open');
-      row.classList.toggle('expanded', open);
+    // Compute totals
+    let totalIncome = 0, totalSpending = 0;
+    const catActuals = {};  // uid → sum (signed)
+    txns.forEach(t => {
+      catActuals[t.category_uid] = (catActuals[t.category_uid] || 0) + t.amount;
+      if (t.amount > 0) totalIncome += t.amount;
+      else totalSpending += Math.abs(t.amount);
     });
 
-    wrapper.appendChild(row);
-    wrapper.appendChild(txList);
-    return wrapper;
-  }
+    const net = totalIncome - totalSpending;
+    document.getElementById('cf-income').textContent   = fmtMoney(totalIncome);
+    document.getElementById('cf-spending').textContent = fmtMoney(totalSpending);
+    const netEl = document.getElementById('cf-net');
+    netEl.textContent = fmtMoney(net, true);
+    netEl.className = 'cf-amount ' + (net >= 0 ? 'positive' : 'negative');
 
-  if (incomeCats.length === 0) {
-    incomeList.innerHTML = '<p style="padding:12px;color:var(--on-surface-var);font-size:0.85rem;">No income categories</p>';
-  } else {
-    incomeCats.forEach(c => incomeList.appendChild(buildCatRow(c)));
-  }
+    const budgetByUid = {};
+    budgetItems.forEach(b => { budgetByUid[b.category_uid] = b.value; });
 
-  if (spendingCats.length === 0) {
-    spendingList.innerHTML = '<p style="padding:12px;color:var(--on-surface-var);font-size:0.85rem;">No spending categories</p>';
-  } else {
-    spendingCats.forEach(c => spendingList.appendChild(buildCatRow(c)));
+    // Group transactions by category for expand
+    const txnsByCategory = {};
+    txns.forEach(t => {
+      if (!txnsByCategory[t.category_uid]) txnsByCategory[t.category_uid] = [];
+      txnsByCategory[t.category_uid].push(t);
+    });
+
+    incomeList.innerHTML   = '';
+    spendingList.innerHTML = '';
+
+    const incomeCats   = categories.filter(c =>  c.is_positive);
+    const spendingCats = categories.filter(c => !c.is_positive);
+
+    function buildCatRow(cat) {
+      const actual  = catActuals[cat.uid] || 0;
+      const budget  = budgetByUid[cat.uid] || 0;
+      const displayActual = Math.abs(actual);
+      const isOver  = budget > 0 && displayActual > budget;
+      const wrapper = document.createElement('div');
+
+      const row = document.createElement('div');
+      row.className = 'cat-row';
+      row.innerHTML = `
+        <span class="cat-name">${cat.name}</span>
+        <span class="cat-amounts">
+          <span class="cat-actual ${cat.is_positive ? 'positive' : (isOver ? 'negative' : '')}">${fmtMoney(displayActual)}</span>
+          ${budget ? `<span class="cat-budget">of ${fmtMoney(budget)}</span>` : ''}
+        </span>
+        <span class="cat-expand-icon">&#9660;</span>
+      `;
+
+      const txList = document.createElement('div');
+      txList.className = 'receipts-list';
+
+      const catTxns = txnsByCategory[cat.uid] || [];
+      if (catTxns.length === 0) {
+        txList.innerHTML = '<p style="font-size:0.8rem;color:var(--on-surface-var);padding:4px 0;">No transactions</p>';
+      } else {
+        catTxns.forEach(t => {
+          const item = document.createElement('div');
+          item.className = 'receipt-item';
+          item.innerHTML = `
+            <span class="receipt-date">${epochDayToStr(t.epoch_day)}</span>
+            <span class="receipt-desc">${t.description || ''}</span>
+            <span class="receipt-amt ${t.amount >= 0 ? 'positive' : 'negative'}">${fmtMoney(Math.abs(t.amount))}</span>
+          `;
+          txList.appendChild(item);
+        });
+      }
+
+      row.addEventListener('click', () => {
+        const open = txList.classList.toggle('open');
+        row.classList.toggle('expanded', open);
+      });
+
+      wrapper.appendChild(row);
+      wrapper.appendChild(txList);
+      return wrapper;
+    }
+
+    if (incomeCats.length === 0) {
+      incomeList.innerHTML = '<p style="padding:12px;color:var(--on-surface-var);font-size:0.85rem;">No income categories</p>';
+    } else {
+      incomeCats.forEach(c => incomeList.appendChild(buildCatRow(c)));
+    }
+
+    if (spendingCats.length === 0) {
+      spendingList.innerHTML = '<p style="padding:12px;color:var(--on-surface-var);font-size:0.85rem;">No spending categories</p>';
+    } else {
+      spendingCats.forEach(c => spendingList.appendChild(buildCatRow(c)));
+    }
+
+  } catch (e) {
+    incomeList.innerHTML = `<p style="padding:12px;color:var(--error);font-size:0.85rem;">Failed to load: ${e.message}</p>`;
+    spendingList.innerHTML = '';
   }
 }
 
@@ -1236,16 +1433,18 @@ async function renderSummary() {
 /* ========================================================================= */
 
 document.getElementById('budget-prev').addEventListener('click', () => {
-  state.budget.month = prevMonth(state.budget.month);
+  sharedMonth = prevMonth(sharedMonth);
+  syncMonthLabels();
   renderBudget();
 });
 document.getElementById('budget-next').addEventListener('click', () => {
-  state.budget.month = nextMonth(state.budget.month);
+  sharedMonth = nextMonth(sharedMonth);
+  syncMonthLabels();
   renderBudget();
 });
 
 async function renderBudget() {
-  const mk = state.budget.month;
+  const mk = sharedMonth;
   document.getElementById('budget-month-label').textContent = monthKeyToLabel(mk);
 
   const items = await loadBudgetItems(mk);
@@ -1306,16 +1505,18 @@ async function renderBudget() {
 /* ========================================================================= */
 
 document.getElementById('receipts-prev').addEventListener('click', () => {
-  state.receipts.month = prevMonth(state.receipts.month);
+  sharedMonth = prevMonth(sharedMonth);
+  syncMonthLabels();
   renderReceipts();
 });
 document.getElementById('receipts-next').addEventListener('click', () => {
-  state.receipts.month = nextMonth(state.receipts.month);
+  sharedMonth = nextMonth(sharedMonth);
+  syncMonthLabels();
   renderReceipts();
 });
 
 async function renderReceipts() {
-  const mk = state.receipts.month;
+  const mk = sharedMonth;
   document.getElementById('receipts-month-label').textContent = monthKeyToLabel(mk);
 
   const list = document.getElementById('receipts-list');
@@ -1421,7 +1622,7 @@ async function openEditModal(txn) {
             epochDayToDate(rec.end_date).toISOString().split('T')[0];
         }
         // Show active-in-month toggle for existing recurrences
-        const mk = state.receipts.month;
+        const mk = sharedMonth;
         const targetEpoch = monthKeyToFirstEpochDay(mk);
         document.getElementById('edit-rec-month-label').textContent = monthKeyToLabel(mk);
         document.getElementById('recurrence-active-section').style.display = 'block';
@@ -1496,7 +1697,7 @@ document.getElementById('btn-edit-txn-save').addEventListener('click', async () 
 
       // Save active-in-month toggle (only relevant if editing an existing recurrence)
       if (_editRec) {
-        const mk = state.receipts.month;
+        const mk = sharedMonth;
         const targetEpoch = monthKeyToFirstEpochDay(mk);
         const isActive = document.getElementById('edit-rec-active-month').checked;
         await apiFetch(`/recurrences/${recId}/months/${targetEpoch}`, {
@@ -1506,7 +1707,7 @@ document.getElementById('btn-edit-txn-save').addEventListener('click', async () 
       }
     } else if (_editRec) {
       // User un-ticked Recurring — prompt before removing
-      const mk = state.receipts.month;
+      const mk = sharedMonth;
       const monthLabel = monthKeyToLabel(mk);
       const setEndDate = confirm(
         `Set end date to ${monthLabel} to keep the receipt in this + previous months (OK),\nor remove the recurrence entirely and keep only the original instance (Cancel)?`
@@ -1562,7 +1763,10 @@ function updatePrefDisplay() {
   document.getElementById('pref-url-display').textContent = apiBase || 'not set';
 }
 
-document.getElementById('btn-prefs').addEventListener('click', () => switchTab('prefs'));
+document.getElementById('btn-prefs').addEventListener('click', () => {
+  switchView('transactions');
+  switchTab('prefs');
+});
 
 document.getElementById('btn-change-url').addEventListener('click', () => {
   document.getElementById('url-input').value = apiBase;
@@ -1753,12 +1957,29 @@ document.getElementById('btn-import-csv-save').addEventListener('click', async (
 });
 
 /* ========================================================================= */
+/* Shared month helpers                                                       */
+/* ========================================================================= */
+
+// Keep all month labels in sync whenever sharedMonth changes
+function syncMonthLabels() {
+  const label = monthKeyToLabel(sharedMonth);
+  document.getElementById('summary-month-label').textContent  = label;
+  document.getElementById('budget-month-label').textContent   = label;
+  document.getElementById('receipts-month-label').textContent = label;
+  document.getElementById('analysis-month-label').textContent = label;
+}
+
+/* ========================================================================= */
 /* Tab switching                                                              */
 /* ========================================================================= */
 
+let _activeTab = 'entry';
+
 function switchTab(name) {
+  _activeTab = name;
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.pane === name));
   document.querySelectorAll('.pane').forEach(p => p.classList.toggle('active', p.id === 'pane-' + name));
+  document.getElementById('pane-analysis').classList.remove('active');
 
   if (name === 'summary')  renderSummary();
   if (name === 'budget')   renderBudget();
@@ -1766,8 +1987,306 @@ function switchTab(name) {
 }
 
 document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => switchTab(btn.dataset.pane));
+  btn.addEventListener('click', () => {
+    switchView('transactions');
+    switchTab(btn.dataset.pane);
+  });
 });
+
+/* ========================================================================= */
+/* View toggle: Transactions ↔ Analysis                                       */
+/* ========================================================================= */
+
+function switchView(view) {
+  document.querySelectorAll('.view-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  const tabbar = document.getElementById('tabbar');
+  if (view === 'transactions') {
+    tabbar.style.display = '';
+    document.getElementById('pane-analysis').classList.remove('active');
+    switchTab(_activeTab);
+  } else {
+    // Analysis view — hide tab bar, show analysis pane
+    tabbar.style.display = 'none';
+    document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
+    document.getElementById('pane-analysis').classList.add('active');
+    renderAnalysis();
+  }
+}
+
+document.querySelectorAll('.view-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchView(btn.dataset.view));
+});
+
+/* ========================================================================= */
+/* ANALYSIS pane                                                              */
+/* ========================================================================= */
+
+// Set of category UIDs the user has de-selected in the filter
+let _analysisHidden = new Set();
+// Cache of {month, txns} for the current range so re-filtering doesn't re-fetch
+let _analysisData = null;
+
+document.getElementById('analysis-prev').addEventListener('click', () => {
+  sharedMonth = prevMonth(sharedMonth);
+  syncMonthLabels();
+  _analysisData = null;
+  renderAnalysis();
+});
+document.getElementById('analysis-next').addEventListener('click', () => {
+  sharedMonth = nextMonth(sharedMonth);
+  syncMonthLabels();
+  _analysisData = null;
+  renderAnalysis();
+});
+document.getElementById('analysis-range').addEventListener('change', () => {
+  _analysisData = null;
+  _analysisHidden = new Set();
+  renderAnalysis();
+});
+
+// Category filter dropdown toggle
+document.getElementById('cat-filter-btn').addEventListener('click', e => {
+  e.stopPropagation();
+  document.getElementById('cat-filter-dropdown').classList.toggle('open');
+});
+document.addEventListener('click', () => {
+  document.getElementById('cat-filter-dropdown').classList.remove('open');
+});
+
+async function renderAnalysis() {
+  const mk = sharedMonth;
+  document.getElementById('analysis-month-label').textContent = monthKeyToLabel(mk);
+
+  const chartEl    = document.getElementById('analysis-chart');
+  const totalsEl   = document.getElementById('analysis-cat-totals');
+  chartEl.innerHTML  = '<div class="loading-row"><div class="spinner"></div></div>';
+  totalsEl.innerHTML = '';
+
+  const rangeVal = parseInt(document.getElementById('analysis-range').value, 10);
+
+  // Build list of month keys to include (oldest → newest)
+  let months = [];
+  if (rangeVal === 0) {
+    // All time: discover earliest month from all transactions
+    try {
+      if (categories.length === 0) await loadCategories();
+      const all = await apiFetch('/transactions');
+      if (all.length > 0) {
+        const minDay = Math.min(...all.map(t => t.epoch_day));
+        const d = new Date(minDay * 86400000);
+        let cur = d.getUTCFullYear() * 100 + (d.getUTCMonth() + 1);
+        while (cur <= mk) { months.push(cur); cur = nextMonth(cur); }
+      } else {
+        months = [mk];
+      }
+    } catch { months = [mk]; }
+  } else {
+    let cur = mk;
+    for (let i = 0; i < rangeVal; i++) { months.unshift(cur); cur = prevMonth(cur); }
+  }
+
+  // Fetch data for each month (use cache if unchanged)
+  try {
+    if (categories.length === 0) await loadCategories();
+    if (!_analysisData) {
+      const results = await Promise.all(months.map(m => loadTransactions(m)));
+      _analysisData = months.map((m, i) => ({ month: m, txns: results[i] }));
+    }
+  } catch (e) {
+    chartEl.innerHTML = `<p style="padding:16px;color:var(--error);">Failed to load: ${e.message}</p>`;
+    return;
+  }
+
+  // Determine which category UIDs appear in this range
+  const catsInRange = new Set();
+  _analysisData.forEach(d => d.txns.forEach(t => catsInRange.add(t.category_uid)));
+
+  // Rebuild category filter checkboxes
+  _buildCatFilter(catsInRange);
+
+  // Render chart
+  _renderAnalysisChart(_analysisData);
+}
+
+function _buildCatFilter(catsInRange) {
+  const listEl = document.getElementById('cat-filter-list');
+  listEl.innerHTML = '';
+
+  // Prune hidden set: remove UIDs no longer in range
+  for (const uid of [..._analysisHidden]) {
+    if (!catsInRange.has(uid)) _analysisHidden.delete(uid);
+  }
+
+  const rangeCats = categories.filter(c => catsInRange.has(c.uid));
+
+  rangeCats.forEach(cat => {
+    const div = document.createElement('div');
+    div.className = 'cf-item';
+    const lbl = document.createElement('label');
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.dataset.uid = cat.uid;
+    chk.checked = !_analysisHidden.has(cat.uid);
+    chk.addEventListener('change', () => {
+      if (chk.checked) _analysisHidden.delete(cat.uid);
+      else             _analysisHidden.add(cat.uid);
+      document.getElementById('cat-select-all').checked = (_analysisHidden.size === 0);
+      _updateFilterLabel(rangeCats);
+      if (_analysisData) _renderAnalysisChart(_analysisData);
+    });
+    lbl.appendChild(chk);
+    lbl.appendChild(document.createTextNode('\u00a0' + cat.name + (cat.is_positive ? ' (income)' : '')));
+    div.appendChild(lbl);
+    listEl.appendChild(div);
+  });
+
+  const selectAllEl = document.getElementById('cat-select-all');
+  selectAllEl.checked = (_analysisHidden.size === 0);
+  selectAllEl.onchange = () => {
+    if (selectAllEl.checked) {
+      _analysisHidden.clear();
+      listEl.querySelectorAll('input[type=checkbox]').forEach(c => { c.checked = true; });
+    } else {
+      rangeCats.forEach(c => _analysisHidden.add(c.uid));
+      listEl.querySelectorAll('input[type=checkbox]').forEach(c => { c.checked = false; });
+    }
+    _updateFilterLabel(rangeCats);
+    if (_analysisData) _renderAnalysisChart(_analysisData);
+  };
+
+  _updateFilterLabel(rangeCats);
+}
+
+function _updateFilterLabel(rangeCats) {
+  const shown   = rangeCats.length - rangeCats.filter(c => _analysisHidden.has(c.uid)).length;
+  const labelEl = document.getElementById('cat-filter-label');
+  if (_analysisHidden.size === 0) labelEl.textContent = 'All Categories';
+  else if (shown === 0)           labelEl.textContent = 'No Categories';
+  else                            labelEl.textContent = `${shown} of ${rangeCats.length} Categories`;
+}
+
+function _renderAnalysisChart(data) {
+  const chartEl  = document.getElementById('analysis-chart');
+  const totalsEl = document.getElementById('analysis-cat-totals');
+  chartEl.innerHTML  = '';
+  totalsEl.innerHTML = '';
+
+  if (!data || data.length === 0) return;
+
+  // Per-month income/spending (filtered)
+  const monthStats = data.map(d => {
+    let income = 0, spending = 0;
+    d.txns.forEach(t => {
+      if (_analysisHidden.has(t.category_uid)) return;
+      if (t.amount > 0) income   += t.amount;
+      else              spending += Math.abs(t.amount);
+    });
+    return { month: d.month, income, spending, net: income - spending };
+  });
+
+  const maxVal = Math.max(...monthStats.map(s => Math.max(s.income, s.spending)), 1);
+
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.style.cssText = 'padding:16px; margin-bottom:12px;';
+  const cardTitle = document.createElement('div');
+  cardTitle.className = 'card-title';
+  cardTitle.textContent = 'Income vs Spending';
+  card.appendChild(cardTitle);
+
+  monthStats.forEach(s => {
+    const grp = document.createElement('div');
+    grp.className = 'analysis-group';
+
+    const title = document.createElement('div');
+    title.className = 'analysis-group-title';
+    title.textContent = monthKeyToLabel(s.month);
+    grp.appendChild(title);
+
+    grp.appendChild(_makeBar('Income',   s.income,   maxVal, 'income',   'positive'));
+    grp.appendChild(_makeBar('Spending', s.spending, maxVal, 'spending', 'negative'));
+
+    const netDiv = document.createElement('div');
+    netDiv.className = 'analysis-net';
+    const cls = s.net >= 0 ? 'positive' : 'negative';
+    netDiv.innerHTML = `Net: <span class="${cls}" style="font-weight:700;">${fmtMoney(s.net, true)}</span>`;
+    grp.appendChild(netDiv);
+
+    card.appendChild(grp);
+  });
+  chartEl.appendChild(card);
+
+  // Category totals over the whole range
+  const catSums = {};
+  data.forEach(d => {
+    d.txns.forEach(t => {
+      if (_analysisHidden.has(t.category_uid)) return;
+      catSums[t.category_uid] = (catSums[t.category_uid] || 0) + t.amount;
+    });
+  });
+
+  const entries = Object.entries(catSums)
+    .map(([uid, amt]) => ({ cat: categories.find(c => c.uid === uid), amt }))
+    .filter(e => e.cat);
+
+  if (entries.length === 0) return;
+
+  const tCard = document.createElement('div');
+  tCard.className = 'card';
+  tCard.style.cssText = 'padding:0 8px;';
+
+  const income  = entries.filter(e =>  e.cat.is_positive).sort((a, b) => b.amt - a.amt);
+  const spend   = entries.filter(e => !e.cat.is_positive).sort((a, b) => a.amt - b.amt);
+
+  function appendSection(title, rows) {
+    if (!rows.length) return;
+    const h = document.createElement('div');
+    h.className = 'summary-section-title';
+    h.style.cssText = 'padding:12px 8px 4px;';
+    h.textContent = title;
+    tCard.appendChild(h);
+    rows.forEach(e => {
+      const row = document.createElement('div');
+      row.className = 'cat-row';
+      row.style.cursor = 'default';
+      row.innerHTML = `
+        <span class="cat-name">${e.cat.name}</span>
+        <span class="cat-amounts">
+          <span class="cat-actual ${e.cat.is_positive ? 'positive' : 'negative'}">${fmtMoney(Math.abs(e.amt))}</span>
+        </span>`;
+      tCard.appendChild(row);
+    });
+  }
+
+  appendSection('Income by Category',  income);
+  appendSection('Spending by Category', spend);
+  totalsEl.appendChild(tCard);
+}
+
+function _makeBar(label, value, maxVal, fillClass, amtClass) {
+  const row = document.createElement('div');
+  row.className = 'bar-row';
+
+  const lbl = document.createElement('span');
+  lbl.className = 'bar-label';
+  lbl.textContent = label;
+
+  const track = document.createElement('div');
+  track.className = 'bar-track';
+  const fill = document.createElement('div');
+  fill.className = `bar-fill ${fillClass}`;
+  fill.style.width = `${value > 0 ? Math.max(1, Math.round(value / maxVal * 100)) : 0}%`;
+  track.appendChild(fill);
+
+  const amt = document.createElement('span');
+  amt.className = `bar-amount ${amtClass}`;
+  amt.textContent = fmtMoney(value);
+
+  row.appendChild(lbl);
+  row.appendChild(track);
+  row.appendChild(amt);
+  return row;
+}
 
 /* Close modals on overlay click */
 document.querySelectorAll('.modal-overlay').forEach(overlay => {
@@ -1793,6 +2312,7 @@ async function boot() {
   try {
     await loadCategories();
     initEntryPane();
+    syncMonthLabels();
   } catch (e) {
     showSnackbar('Could not connect to API. Check Preferences.', 5000);
   }
