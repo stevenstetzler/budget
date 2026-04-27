@@ -2,7 +2,6 @@ package com.vidalabs.budget.ui.onboarding
 
 data class ChangelogEntry(
     val versionName: String,
-    val versionCode: Int,
     val changes: List<String>
 )
 
@@ -13,7 +12,6 @@ data class ChangelogEntry(
 val CHANGELOG: List<ChangelogEntry> = listOf(
     ChangelogEntry(
         versionName = "0.0.1",
-        versionCode = 1,
         changes = listOf(
             "Add \"New category\" option to Category dropdown in EntryPane",
             "Support importing transactions from JSON and CSV",

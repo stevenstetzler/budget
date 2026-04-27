@@ -12,17 +12,24 @@ import androidx.compose.ui.unit.dp
 
 /**
  * Dialog shown when the app is launched after an update.
- * Displays all changelog entries for versions newer than [lastSeenVersionCode].
+ * Displays all changelog entries for versions newer than [lastSeenVersionName].
  */
 @Composable
 fun WhatsNewDialog(
-    currentVersionCode: Int,
-    lastSeenVersionCode: Int,
+    currentVersionName: String,
+    lastSeenVersionName: String,
     onDismiss: () -> Unit
 ) {
-    val newEntries = CHANGELOG
-        .filter { it.versionCode in (lastSeenVersionCode + 1)..currentVersionCode }
-        .sortedByDescending { it.versionCode }
+    // CHANGELOG is sorted newest-first; show all entries that appear before lastSeenVersionName.
+    // If lastSeenVersionName is not found (e.g. very old or unknown version), show only the
+    // current version's entry to avoid overwhelming the user with the full history.
+    val lastSeenIndex = CHANGELOG.indexOfFirst { it.versionName == lastSeenVersionName }
+    val currentIndex = CHANGELOG.indexOfFirst { it.versionName == currentVersionName }
+    val newEntries = when {
+        lastSeenIndex != -1 -> CHANGELOG.take(lastSeenIndex)
+        currentIndex != -1 -> listOf(CHANGELOG[currentIndex])
+        else -> emptyList()
+    }
 
     AlertDialog(
         onDismissRequest = { /* require explicit tap on button */ },
