@@ -6,8 +6,12 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import com.vidalabs.budget.AppPrefs
 import com.vidalabs.budget.ui.budget.BudgetPane
 import com.vidalabs.budget.ui.entry.EntryPane
+import com.vidalabs.budget.ui.onboarding.WelcomeScreen
+import com.vidalabs.budget.ui.onboarding.WhatsNewDialog
 import com.vidalabs.budget.ui.summary.SummaryPane
 import com.vidalabs.budget.ui.transactions.TransactionsPane
 import com.vidalabs.budget.sync.SyncManager
@@ -16,6 +20,22 @@ import com.vidalabs.budget.ui.prefs.PreferencesPane
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BudgetApp(vm: BudgetViewModel, sync: SyncManager, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val appPrefs = remember { AppPrefs(context) }
+    val currentVersionName = remember {
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: ""
+    }
+    val lastSeenVersionName = remember { appPrefs.getLastSeenVersionName() }
+
+    // true when this is a brand-new install (no version ever stored)
+    var showWelcome by remember { mutableStateOf(lastSeenVersionName.isEmpty()) }
+    // true when the app has been updated since the user last launched it.
+    // Reinstalls clear SharedPreferences so lastSeenVersionName is empty, which means
+    // showWelcome is true and this stays false (guarded by !showWelcome).
+    var showWhatsNew by remember {
+        mutableStateOf(!showWelcome && lastSeenVersionName != currentVersionName)
+    }
+
     var tab by remember { mutableStateOf(0) } // 0=Entry, 1=Summary, 2=Budget, 3=Transactions, 4=Preferences
 
     Scaffold(
@@ -56,5 +76,25 @@ fun BudgetApp(vm: BudgetViewModel, sync: SyncManager, modifier: Modifier = Modif
                 4 -> PreferencesPane(vm = vm, sync = sync, modifier = Modifier.fillMaxSize())
             }
         }
+    }
+
+    if (showWelcome) {
+        WelcomeScreen(
+            onDismiss = {
+                appPrefs.setLastSeenVersionName(currentVersionName)
+                showWelcome = false
+            }
+        )
+    }
+
+    if (showWhatsNew) {
+        WhatsNewDialog(
+            currentVersionName = currentVersionName,
+            lastSeenVersionName = lastSeenVersionName,
+            onDismiss = {
+                appPrefs.setLastSeenVersionName(currentVersionName)
+                showWhatsNew = false
+            }
+        )
     }
 }
