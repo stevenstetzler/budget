@@ -62,6 +62,21 @@ FLASK_DEBUG=1 python app.py
 `epoch_day` is the number of days since 1970-01-01 (Unix epoch in days).
 `amount` is signed: positive for income, negative for expense.
 
+Import payloads from CSV/JSON are also accepted:
+
+```json
+{
+  "date": "2026-03-01",
+  "category": "groceries",
+  "isPositive": false,
+  "amount": 45.50,
+  "description": "Whole Foods"
+}
+```
+
+When this form is used, `date` is converted to `epoch_day`, and the category is
+resolved by name (created automatically if needed using `isPositive`).
+
 ### PUT `/budget/api/budget-items`
 
 ```json
